@@ -7,3 +7,4 @@
 #define IO_RED "\033[31m"
 
 void eprintf(const char* fmt, ...);
+void println(const char* fmt, ...);
