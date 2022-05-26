@@ -1,3 +1,5 @@
+/* HelloWorld in B */
+
 main() {
     extern a, b, c;
     putchar(a);

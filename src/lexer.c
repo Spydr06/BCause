@@ -8,13 +8,13 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-#define TOKEN1(tok, _kind) do {                      \
-    tok.kind = _kind;                               \
+#define TOKEN1(tok, _kind) do { \
+    tok.kind = _kind;           \
 } while(0)
 
-#define TOKEN2(l, tok, _kind) do {                   \
-    lexer_next(l);                                   \
-    tok.kind = _kind;                               \
+#define TOKEN2(l, tok, _kind) do { \
+    lexer_next(l);                 \
+    tok.kind = _kind;              \
 } while(0)
 
 static const char* KEYWORDS[TOKEN_LAST] = {
@@ -94,6 +94,16 @@ static void lexer_get_num(Lexer_T* l)
 {
     while(isdigit(lexer_next(l)));
     l->pos -= 1;
+}
+
+static void lexer_get_char(Lexer_T* l)
+{
+    while(lexer_next(l) != '\'') {
+        if(l->c == '\0' || l->c == '\n') {
+            eprintf("Unclosed char literal (%lu).\n", l->pos);
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 Token_T lexer_get_token(Lexer_T* l)
@@ -187,6 +197,14 @@ Token_T lexer_get_token(Lexer_T* l)
             default:
                 TOKEN1(tok, TOKEN_EQUALS);        
             }
+        } break;
+
+        case '\'': {
+            lexer_get_char(l);
+            size_t len = l->pos - start - 1;
+            tok.kind = TOKEN_CHAR;   
+            tok.value = calloc(len, sizeof(char));
+            snprintf(tok.value, len, "%s", &l->buffer[start + 1]); 
         } break;
         
         case '\0':

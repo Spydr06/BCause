@@ -14,6 +14,7 @@ typedef enum {
     TOKEN_EOF,
     TOKEN_ID,
     TOKEN_NUMBER,
+    TOKEN_CHAR,
 
     TOKEN_EXTRN,
     TOKEN_AUTO,

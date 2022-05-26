@@ -4,7 +4,7 @@
 
 ### Current Status
 
-- [ ] token lexing
+- [x] token lexing
 - [ ] parsing
 - [ ] optimization
 - [ ] code generation 
