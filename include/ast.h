@@ -26,6 +26,7 @@ struct AST_NODE_STRUCT {
         struct {
             Node_T* body;
             Node_T** args;
+            Node_T** vars;
         };
         struct {
             Node_T* left;

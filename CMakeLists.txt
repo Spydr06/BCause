@@ -15,9 +15,9 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 file(GLOB_RECURSE source src/*.c)
-add_executable(bc ${source})
+add_executable(bcause ${source})
 
-install(PROGRAMS ${PROJECT_SOURCE_DIR}/bin/bc 
+install(PROGRAMS ${PROJECT_SOURCE_DIR}/bin/bcause 
         DESTINATION bin
-        RENAME "bc"
+        RENAME "bcause"
 )
