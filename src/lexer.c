@@ -8,13 +8,13 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-#define TOKEN1(tok, _kind) do { \
-    tok.kind = _kind;           \
+#define TOKEN1(l, _kind) do { \
+    l->token.kind = _kind;           \
 } while(0)
 
-#define TOKEN2(l, tok, _kind) do { \
+#define TOKEN2(l, _kind) do { \
     lexer_next(l);                 \
-    tok.kind = _kind;              \
+    l->token.kind = _kind;              \
 } while(0)
 
 static const char* KEYWORDS[TOKEN_LAST] = {
@@ -110,7 +110,7 @@ Token_T lexer_get_token(Lexer_T* l)
 {
     lexer_skip_whitespace(l);
 
-    Token_T tok = {.value = ""};
+    l->token = (Token_T){.value = ""};
     size_t start = l->pos - 1;
 
     if(isalnum(l->c)) {
@@ -121,16 +121,16 @@ Token_T lexer_get_token(Lexer_T* l)
             is_num = true;
             lexer_get_num(l);
         }
-        size_t len = l->pos - start;
+        size_t len = l->pos - start + (l->pos >= l->size - 1);
 
-        tok.kind = is_num ? TOKEN_NUMBER : TOKEN_ID;
-        tok.value = calloc(len + 1, sizeof(char));
-        strncpy(tok.value, &l->buffer[start], len);
+        l->token.kind = is_num ? TOKEN_NUMBER : TOKEN_ID;
+        l->token.value = calloc(len + 1, sizeof(char));
+        strncpy(l->token.value, &l->buffer[start], len);
 
         for(size_t i = 0; i < TOKEN_LAST; i++) {
-            if(KEYWORDS[i] && strcmp(tok.value, KEYWORDS[i]) == 0)
+            if(KEYWORDS[i] && strcmp(l->token.value, KEYWORDS[i]) == 0)
             {
-                tok.kind = i;
+                l->token.kind = i;
                 break;
             }
         }
@@ -138,77 +138,77 @@ Token_T lexer_get_token(Lexer_T* l)
     else
         switch(l->c) {
         case '(':
-            TOKEN1(tok, TOKEN_LPAREN);
+            TOKEN1(l, TOKEN_LPAREN);
             break;
         case ')':
-            TOKEN1(tok, TOKEN_RPAREN);
+            TOKEN1(l, TOKEN_RPAREN);
             break;
         case '[':
-            TOKEN1(tok, TOKEN_LBRACKET);
+            TOKEN1(l, TOKEN_LBRACKET);
             break;
         case ']':
-            TOKEN1(tok, TOKEN_RBRACKET);
+            TOKEN1(l, TOKEN_RBRACKET);
             break;
         case '{':
-            TOKEN1(tok, TOKEN_LBRACE);
+            TOKEN1(l, TOKEN_LBRACE);
             break;
         case '}':
-            TOKEN1(tok, TOKEN_RBRACE);
+            TOKEN1(l, TOKEN_RBRACE);
             break;
         case ';':
-            TOKEN1(tok, TOKEN_SEMICOLON);
+            TOKEN1(l, TOKEN_SEMICOLON);
             break;
         case ',':
-            TOKEN1(tok, TOKEN_SEMICOLON);
+            TOKEN1(l, TOKEN_COMMA);
             break;
         case '+':
-            TOKEN1(tok, TOKEN_PLUS);
+            TOKEN1(l, TOKEN_PLUS);
             break;
         case '-':
-            TOKEN1(tok, TOKEN_MINUS);
+            TOKEN1(l, TOKEN_MINUS);
             break;
         case '*':
-            TOKEN1(tok, TOKEN_STAR);
+            TOKEN1(l, TOKEN_STAR);
             break;
         case '/':
-            TOKEN1(tok, TOKEN_SLASH);
+            TOKEN1(l, TOKEN_SLASH);
             break;
         case '%':
-            TOKEN1(tok, TOKEN_PERCENT);
+            TOKEN1(l, TOKEN_PERCENT);
             break;
         case '=': {
             char next = lexer_peek(l, 1);
             switch(next) {
             case '+':
-                TOKEN2(l, tok, TOKEN_EPLUS);
+                TOKEN2(l, TOKEN_EPLUS);
                 break;
             case '-':
-                TOKEN2(l, tok, TOKEN_EMINUS);
+                TOKEN2(l, TOKEN_EMINUS);
                 break;
             case '*':
-                TOKEN2(l, tok, TOKEN_ESTAR);
+                TOKEN2(l, TOKEN_ESTAR);
                 break;
             case '/':
-                TOKEN2(l, tok, TOKEN_ESLASH);
+                TOKEN2(l, TOKEN_ESLASH);
                 break;
             case '%':
-                TOKEN2(l, tok, TOKEN_EPERCENT);
+                TOKEN2(l, TOKEN_EPERCENT);
                 break;
             default:
-                TOKEN1(tok, TOKEN_EQUALS);        
+                TOKEN1(l, TOKEN_EQUALS);        
             }
         } break;
 
         case '\'': {
             lexer_get_char(l);
             size_t len = l->pos - start - 1;
-            tok.kind = TOKEN_CHAR;   
-            tok.value = calloc(len, sizeof(char));
-            snprintf(tok.value, len, "%s", &l->buffer[start + 1]); 
+            l->token.kind = TOKEN_CHAR;   
+            l->token.value = calloc(len, sizeof(char));
+            snprintf(l->token.value, len, "%s", &l->buffer[start + 1]); 
         } break;
         
         case '\0':
-            TOKEN1(tok, TOKEN_EOF);
+            TOKEN1(l, TOKEN_EOF);
             break;
 
         default:
@@ -216,5 +216,5 @@ Token_T lexer_get_token(Lexer_T* l)
             exit(EXIT_FAILURE);
         }
 
-    return tok;
+    return l->token;
 }

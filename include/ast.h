@@ -1,20 +1,12 @@
 #pragma once
+#include <list.h>
 
 typedef enum {
-    NODE_FN,
+    NODE_ROOT,
     NODE_VAR,
+    NODE_FUNC,
 
     NODE_BLOCK,
-    NODE_IF,
-    NODE_WHILE,
-    
-    NODE_ASSING,
-    NODE_ADD,
-    NODE_SUB,
-    NODE_MULT,
-    NODE_DIV,
-    NODE_MOD,
-    NODE_CALL
 } NodeKind_T;
 
 typedef struct AST_NODE_STRUCT Node_T;
@@ -24,13 +16,16 @@ struct AST_NODE_STRUCT {
 
     union {
         struct {
-            Node_T* body;
-            Node_T** args;
-            Node_T** vars;
-        };
+            List_T objs;
+        } root;
         struct {
-            Node_T* left;
-            Node_T* right;
-        };
+            char* name;
+            Node_T* value;
+        } var;
+        struct {
+            char* name;
+            List_T args;
+            Node_T* body;
+        } func;
     };
 };

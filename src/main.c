@@ -1,5 +1,6 @@
+#include "ast.h"
 #include <io.h>
-#include <lexer.h>
+#include <parser.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,10 +10,11 @@ static int compile(char* filename) {
     Lexer_T lexer;
     init_lexer(&lexer, filename);
 
-    Token_T tok;
-    while((tok = lexer_get_token(&lexer)).kind != TOKEN_EOF) {
-        printf("%d %s\n", tok.kind, tok.value);
-    }
+    Node_T ast;
+    memset(&ast, 0, sizeof(Node_T));
+    parse(&lexer, &ast);
+    
+    printf("%ld objs\n", ast.root.objs.size);
 
     free_lexer(&lexer);
     return EXIT_SUCCESS;

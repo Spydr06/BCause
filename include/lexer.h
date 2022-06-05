@@ -2,14 +2,6 @@
 
 #include <io.h>
 
-typedef struct {
-    const char* filename;
-    char* buffer;
-    size_t pos;
-    size_t size;
-    char c;
-} Lexer_T;
-
 typedef enum {
     TOKEN_EOF,
     TOKEN_ID,
@@ -20,6 +12,9 @@ typedef enum {
     TOKEN_AUTO,
     TOKEN_IF,
     TOKEN_WHILE,
+    TOKEN_SWITCH,
+    TOKEN_GOTO,
+    TOKEN_CASE,
 
     TOKEN_LPAREN,    // (
     TOKEN_RPAREN,    // )
@@ -48,6 +43,18 @@ typedef struct {
     TokenKind_T kind;
     char* value;
 } Token_T;
+
+const char* token_kind_to_str(TokenKind_T kind);
+const char* token_to_str(Token_T* token);
+
+typedef struct {
+    const char* filename;
+    char* buffer;
+    size_t pos;
+    size_t size;
+    char c;
+    Token_T token;
+} Lexer_T;
 
 void init_lexer(Lexer_T* l, const char* filename);
 void free_lexer(Lexer_T* l);
