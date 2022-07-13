@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "codegen.h"
 #include <io.h>
 #include <parser.h>
 #include <stdlib.h>
@@ -17,6 +18,10 @@ static int compile(char* filename) {
     printf("%ld objs\n", ast.root.objs.size);
 
     free_lexer(&lexer);
+
+    Generator_T generator;
+    memset(&generator, 0, sizeof(Generator_T));
+    generate(&generator, &ast, "a.out");
     return EXIT_SUCCESS;
 }
 
