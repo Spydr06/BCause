@@ -2,9 +2,11 @@
 
 **BCause** is a compiler for the **B** programming language, developed by *Ken Thompson* and *Dennis Ritchie* at *Bell Labs* in *1969*, later getting replaced by **C**. BCause is written in C and uses, apart from the C standard library, absolutely zero external dependencies.
 
+This repository also includes a `libb` implementation, B's standard library. It requires zero dependencies, not even libc.
+
 ### Current Status
 
-- [x] token lexing
+- [ ] token lexing
 - [ ] parsing
 - [ ] optimization
 - [ ] code generation 
@@ -19,7 +21,7 @@ $ cd ./bcause
 ```
 Then, build the project:
 ```console
-$ cmake . && make
+$ make
 ```
 To install BCause on your computer globally, use: *(needs root privileges)*
 ```console

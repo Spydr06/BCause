@@ -1,7 +1,9 @@
-#include "syscall.h"
-#include <stdarg.h>
+// 
+// This is a minimal implementation of libb, the standard library for the B programming language (1969)
+//
 
 #ifndef B_TYPE
+    /* type representing B's single data type (64-bit int on x86_64) */
     #define B_TYPE long
 #endif
 #ifndef B_FN
@@ -11,6 +13,91 @@
 #define stdin  0
 #define stdout 1
 #define stderr 2
+
+/* VA aliases */
+#define va_start __builtin_va_start
+#define va_end __builtin_va_end
+#define va_arg __builtin_va_arg
+#define va_list __builtin_va_list
+
+/* type used for syscalls */
+#define SYSCALL_TYPE long
+
+static inline SYSCALL_TYPE __syscall_ret(unsigned SYSCALL_TYPE r)
+{
+	if (r > -4096UL) {
+		return -1;
+	}
+	return r;
+}
+
+static inline SYSCALL_TYPE __syscall0(SYSCALL_TYPE n)
+{
+	unsigned SYSCALL_TYPE ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
+	return ret;
+}
+
+static inline SYSCALL_TYPE __syscall1(SYSCALL_TYPE n, SYSCALL_TYPE a1)
+{
+	unsigned SYSCALL_TYPE ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+	return ret;
+}
+
+static inline SYSCALL_TYPE __syscall2(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_TYPE a2)
+{
+	unsigned SYSCALL_TYPE ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2)
+						  : "rcx", "r11", "memory");
+	return ret;
+}
+
+static inline SYSCALL_TYPE __syscall3(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_TYPE a2, SYSCALL_TYPE a3)
+{
+	unsigned SYSCALL_TYPE ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+						  "d"(a3) : "rcx", "r11", "memory");
+	return ret;
+}
+
+#define __scc(X) ((SYSCALL_TYPE) (X))
+
+#define __syscall1(n,a) __syscall1(n,__scc(a))
+#define __syscall2(n,a,b) __syscall2(n,__scc(a),__scc(b))
+#define __syscall3(n,a,b,c) __syscall3(n,__scc(a),__scc(b),__scc(c))
+
+#define __SYSCALL_NARGS_X(a,b,c,d,n,...) n
+#define __SYSCALL_NARGS(...) __SYSCALL_NARGS_X(__VA_ARGS__,3,2,1,0,)
+#define __SYSCALL_CONCAT_X(a,b) a##b
+#define __SYSCALL_CONCAT(a,b) __SYSCALL_CONCAT_X(a,b)
+#define __SYSCALL_DISP(b,...) __SYSCALL_CONCAT(b,__SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
+
+#define __syscall(...) __SYSCALL_DISP(__syscall,__VA_ARGS__)
+#define syscall(...) __syscall_ret(__syscall(__VA_ARGS__))
+
+/* syscall ids */
+#define SYS_read 0
+#define SYS_write 1
+#define SYS_open 2
+#define SYS_close 3
+#define SYS_stat 4
+#define SYS_fstat 5
+#define SYS_seek 8
+#define SYS_fork 57
+#define SYS_execve 59
+#define SYS_exit 60
+#define SYS_wait4 61
+#define SYS_chdir 80
+#define SYS_mkdir 83
+#define SYS_creat 85
+#define SYS_link 86
+#define SYS_unlink 87
+#define SYS_chmod 90
+#define SYS_chown 92
+#define SYS_getuid 102
+#define SYS_setuid 105
+#define SYS_time 201
 
 /* The i-th character of the string is returned */
 B_TYPE B_FN(_char)(B_TYPE string, B_TYPE i) __asm__ ("char"); /* alias name */
@@ -56,12 +143,15 @@ B_TYPE B_FN(creat)(B_TYPE string, B_TYPE mode) {
    the 8-word v~ctor date. The,,converted date has the follow-
    ing format: "Mmm dd hh:mm:ss" */
 void B_FN(ctime)(B_TYPE time, B_TYPE date) {
+    (void) time;
+    (void) date;
     // TODO
 }
 /* The current process is replaced by the execution of the
    file specified by string. The arg-i strings are passed as
    arguments. A return indicates an error. */
 void B_FN(execl)(B_TYPE string, ...) {
+    (void) string;
     // TODO
 }
 
@@ -70,7 +160,13 @@ void B_FN(execl)(B_TYPE string, ...) {
    count are passed as arguments. A return indicates an er-
    ror. */
 void B_FN(execv)(B_TYPE string, B_TYPE argv, B_TYPE count) {
-    syscall(SYS_execve, string, argv, 0);
+    B_TYPE envp = 0;
+    B_TYPE args[count + 1];
+    for(B_TYPE i = 0; i < count; i++) {
+        args[i] = ((B_TYPE*)argv)[i];
+    }
+    args[count] = 0;
+    syscall(SYS_execve, string, args, &envp);
 }
 
 /* The current process is terminated. */
@@ -262,6 +358,7 @@ B_TYPE B_FN(unlink)(B_TYPE string) {
    ror. */
 B_TYPE B_FN(wait)(void) {
     // TODO
+    (void) wait;
     return -1;
 }
 
