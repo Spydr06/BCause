@@ -1,8 +1,5 @@
-cmake_install.cmake
-Makefile
-CMakeCache.txt
-compile_commands.json
-bin/
-CMakeFiles/
 .cache/
 .vscode/
+*.o
+*.out
+*.a
