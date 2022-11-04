@@ -9,8 +9,11 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
+static int subprocess(char *arg0, const char *p_name, char *const *p_arg);
 
 #ifdef __GNUC__
 __attribute((format(printf, 2, 3)))
@@ -28,8 +31,12 @@ int compile(struct compiler_args *args)
 {
     // create a buffer for the assembly code
     char* buf;
+    char* asm_file = A_S;
+    char* obj_file = A_O;
     size_t buf_len;
     FILE* buffer = open_memstream(&buf, &buf_len);
+    FILE* out; 
+    int exit_code;
 
     // open every provided `.b` file and generate assembly for it
     for(int i = 0; i < args->num_input_files; i++) {
@@ -47,7 +54,7 @@ int compile(struct compiler_args *args)
 
     // write the buffer to an assembly file
     fclose(buffer);
-    FILE* out = fopen(A_S, "w");
+    out = fopen(asm_file, "w");
     if(!out) {
         eprintf(args->arg0, "cannot open file " COLOR_BOLD_WHITE "‘%s’:" COLOR_RESET " %s.", A_S, strerror(errno));
         return 1;
@@ -57,14 +64,58 @@ int compile(struct compiler_args *args)
     free(buf);
 
     if(args->do_assembling) {
-        // TODO: assemble here
+        if((exit_code = subprocess(args->arg0, "as", (char *const[]){
+            "as", 
+            asm_file,
+            "-o", obj_file,
+            0
+        }))) {
+            eprintf(args->arg0, "error running assembler (exit code %d)\n", exit_code);
+            return 1;
+        }
     }
     
     if(args->do_linking) {
-        // TODO: link here
+        if((exit_code = subprocess(args->arg0, "ld", (char *const[]){
+            "ld",
+            "-static", "-nostdlib",
+            obj_file,
+            "-L", ".", "-lb",
+            "-o", args->output_file,
+            0
+        }))) {
+            eprintf(args->arg0, "error running linker (exit code %d)\n", exit_code);
+            return 1;
+        }
     }
 
     return 0;
+}
+
+static int subprocess(char *arg0, const char *p_name, char *const *p_arg)
+{
+    pid_t pid = fork();
+
+    if(pid < 0)
+    {
+        eprintf(arg0, "error forking parent process ‘%s’\n", arg0);
+        exit(1);
+    }
+
+    if(pid == 0 && execvp(p_name, p_arg) == -1)
+    {
+        eprintf(arg0, "error executing ‘%s’: %s\n", p_name, strerror(errno));
+        exit(1);
+    }
+
+    int pid_status;
+    if(waitpid(pid, &pid_status, 0) == -1)
+    {
+        eprintf(arg0, "error getting status of child process %d\n", pid);
+        exit(1);
+    }
+
+    return WEXITSTATUS(pid_status);
 }
 
 static void whitespace(FILE *in) {
@@ -206,12 +257,6 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
     }
 }
 
-static void function(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
-{
-    fprintf(out, ".text\n.type %s, @function\n%s:", identifier, identifier);
-    
-}
-
 static void global(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
 {
     fprintf(out,
@@ -285,6 +330,15 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
     }
     else if((args->word_size * num) != 0)
         fprintf(out, "  .zero %ld\n", args->word_size * num);
+}
+
+static void function(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
+{
+    fprintf(out, ".text\n.type %s, @function\n%s:\n", identifier, identifier);
+    
+    fprintf(out, "  push %%rbp\n  mov %%rsp, %%rbp\n");
+
+    fprintf(out, ".L.return.%s:\n  mov %%rbp, %%rsp\n  pop %%rbp\n  ret\n", identifier);
 }
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
