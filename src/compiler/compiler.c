@@ -132,27 +132,77 @@ static long number(FILE *in) {
     return num;
 }
 
-static long constant(char c, FILE *in)
-{
-    switch(c) {
-        default:
-            ungetc(c, in);
-            return number(in);
-            break;
+static long character(struct compiler_args *args, FILE *in) {
+    char c;
+    int i;
+    long value = 0;
+
+    for(i = 0; i < args->word_size; i++) {
+        if(c != '*' && (c = fgetc(in)) == '\'')
+            return value;
+        
+        if(c == '*') {
+            switch(c = fgetc(in)) {
+                case '0':
+                case 'e':
+                    c = '\0';
+                    break;
+                case '(':
+                case ')':
+                case '*':
+                case '\'':
+                case '"':
+                    break;
+                case 't':
+                    c = '\t';
+                    break;
+                case 'n':
+                    c = '\n';
+                    break;
+                default:
+                    eprintf(args->arg0, "undefined escape character ‘*%c’", c);
+                    exit(1);
+            }
+        }
+        value |= c << (i * 8);
     }
+
+    if(fgetc(in) != '\'') {
+        eprintf(args->arg0, "unclosed char literal\n");
+        exit(1);
+    }
+
+    return value;
 }
 
 static void ival(struct compiler_args *args, FILE *in, FILE *out)
 {
-    long l;
-    char c;
+    static char buffer[BUFSIZ];
+    long value;
+    char c = fgetc(in);
 
-    switch(c = fgetc(in)) {
-    default:
-        if((l = constant(c, in)) == EOF) {
+    if(isalpha(c)) {
+        ungetc(c, in);
+        if(identifier(in, buffer, BUFSIZ) == EOF) {
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
+            exit(1);
         }
-        fprintf(out, "  .long %lu\n", l);
+        fprintf(out, "  .long %s\n", buffer);
+    }
+    else if(c == '\'') {
+        if((value = character(args, in)) == EOF) {
+            eprintf(args->arg0, "unexpected end of file, expect ival\n");
+            exit(1);
+        }
+        fprintf(out, "  .long %lu\n", value);
+    }
+    else {
+        ungetc(c, in);
+        if((value = number(in)) == EOF) {
+            eprintf(args->arg0, "unexpected end of file, expect ival\n");
+            exit(1);
+        }
+        fprintf(out, "  .long %lu\n", value);
     }
 }
 
@@ -197,7 +247,8 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
 
     whitespace(in);
     if((c = fgetc(in)) != ']') {
-        num = constant(c, in);
+        ungetc(c, in);
+        num = number(in);
         if(num == EOF) {
             eprintf(args->arg0, "unexpected end of file, expect vector size after ‘[’\n");
             exit(1);
@@ -232,13 +283,13 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
             exit(1);
         }
     }
-    else if(args->word_size * num)
+    else if((args->word_size * num) != 0)
         fprintf(out, "  .zero %ld\n", args->word_size * num);
 }
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
 {
-    char buffer[BUFSIZ];
+    static char buffer[BUFSIZ];
     char c;
     
     while(identifier(in, buffer, BUFSIZ)) {
