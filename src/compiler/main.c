@@ -40,6 +40,7 @@ int main(int argc, char **argv)
     cargs.do_assembling = true;
     cargs.do_linking = true;
     cargs.word_size = X86_64_WORD_SIZE;
+    cargs.arg0 = argv[0];
 
     for(int i = 1; i < argc; i++)
     {

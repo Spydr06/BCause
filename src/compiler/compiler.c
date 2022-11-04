@@ -132,16 +132,114 @@ static long number(FILE *in) {
     return num;
 }
 
-static void function(struct compiler_args *args, FILE *in, FILE *out, char* identifier)
+static long constant(char c, FILE *in)
+{
+    switch(c) {
+        default:
+            ungetc(c, in);
+            return number(in);
+            break;
+    }
+}
+
+static void ival(struct compiler_args *args, FILE *in, FILE *out)
+{
+    long l;
+    char c;
+
+    switch(c = fgetc(in)) {
+    default:
+        if((l = constant(c, in)) == EOF) {
+            eprintf(args->arg0, "unexpected end of file, expect ival\n");
+        }
+        fprintf(out, "  .long %lu\n", l);
+    }
+}
+
+static void function(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
 {
     fprintf(out, ".text\n.type %s, @function\n%s:", identifier, identifier);
+    
+}
+
+static void global(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
+{
+    fprintf(out,
+        ".data\n"
+        ".type %s, @object\n"
+        ".align %d\n"
+        "%s:\n",
+        identifier, args->word_size, identifier
+    );
+    
+    char c;
+    if((c = fgetc(in)) != ';') {
+        ungetc(c, in);
+        do {
+            whitespace(in);
+            ival(args, in, out);
+            whitespace(in);
+        } while((c = fgetc(in)) == ',');
+
+        if(c != ';') {
+            eprintf(args->arg0, "expect ‘;’ at end of declaration\n");
+            exit(1);
+        }
+    }
+    else
+        fprintf(out, "  .zero %d\n", args->word_size);
+}
+
+static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
+{
+    long num = 0;
+    char c;
+
+    whitespace(in);
+    if((c = fgetc(in)) != ']') {
+        num = constant(c, in);
+        if(num == EOF) {
+            eprintf(args->arg0, "unexpected end of file, expect vector size after ‘[’\n");
+            exit(1);
+        }
+        whitespace(in);
+
+        if(fgetc(in) != ']') {
+            eprintf(args->arg0, "expect ‘]’ after vector size\n");
+            exit(1);
+        }
+    }
+
+    fprintf(out, 
+        ".data\n.type %s, @object\n"
+        ".align %d\n"
+        "%s:\n",
+        identifier, args->word_size, identifier
+    );
+
+    whitespace(in);
+
+    if((c = fgetc(in)) != ';') {
+        ungetc(c, in);
+        do {
+            whitespace(in);
+            ival(args, in, out);
+            whitespace(in);
+        } while((c = fgetc(in)) == ',');
+
+        if(c != ';') {
+            eprintf(args->arg0, "expect ‘;’ at end of declaration\n");
+            exit(1);
+        }
+    }
+    else if(args->word_size * num)
+        fprintf(out, "  .zero %ld\n", args->word_size * num);
 }
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
 {
     char buffer[BUFSIZ];
     char c;
-    long num;
     
     while(identifier(in, buffer, BUFSIZ)) {
         fprintf(out, ".globl %s\n", buffer);
@@ -153,23 +251,7 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
             break;
         
         case '[':
-            num = number(in);
-            if(num == EOF) {
-                eprintf(args->arg0, "unexpected end of file, expect vector size after ‘[’\n");
-                exit(1);
-            }
-            fprintf(out, 
-                ".data\n.type %s, @object\n"
-                ".size %s, %ld\n"
-                ".align %d\n"
-                "%s:\n"
-                "  .zero %ld\n", 
-                buffer, buffer, args->word_size * num, args->word_size, buffer, args->word_size * num
-            );
-            if(fgetc(in) != ']') {
-                eprintf(args->arg0, "expect ‘]’ after vector size\n");
-                exit(1);
-            }
+            vector(args, in, out, buffer);
             break;
         
         case EOF:
@@ -177,27 +259,13 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
             exit(1);
         
         default:
-            if(isdigit(c)) {
-                ungetc(c, in);
-                fprintf(out,
-                    ".data\n"
-                    ".type %s, @object\n"
-                    ".size %s, %d\n"
-                    ".align %d\n"
-                    "%s:\n"
-                    "  .long %ld\n",
-                    buffer, buffer, args->word_size, args->word_size, buffer, number(in)
-                );
-                break;
-            }
-            
-            eprintf(args->arg0, "unexpected character " COLOR_BOLD_WHITE "‘%c’" COLOR_RESET " after declaration\n", c);
-            exit(1);
+            ungetc(c, in);
+            global(args, in, out, buffer);
         }
     }
 
     if(fgetc(in) != EOF) {
-        eprintf(args->arg0, "expect identifier at top level.");
+        eprintf(args->arg0, "expect identifier at top level\n");
         exit(1);
     }
 }

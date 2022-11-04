@@ -11,7 +11,7 @@
 #define COLOR_BOLD_RED   "\033[1m\033[31m"
 #define COLOR_BOLD_WHITE "\033[1m\033[37m"
 
-#define X86_64_WORD_SIZE 8
+#define X86_64_WORD_SIZE sizeof(long)
 
 struct compiler_args {
     char *arg0; /* name of the executable */
