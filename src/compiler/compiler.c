@@ -73,6 +73,8 @@ int compile(struct compiler_args *args)
             eprintf(args->arg0, "error running assembler (exit code %d)\n", exit_code);
             return 1;
         }
+
+        remove(asm_file);
     }
     
     if(args->do_linking) {
@@ -80,13 +82,16 @@ int compile(struct compiler_args *args)
             "ld",
             "-static", "-nostdlib",
             obj_file,
-            "-L", ".", "-lb",
+            "-L.", "-L/lib64", "-L/usr/local/lib64",
+            "-lb",
             "-o", args->output_file,
             0
         }))) {
             eprintf(args->arg0, "error running linker (exit code %d)\n", exit_code);
             return 1;
         }
+
+        remove(obj_file);
     }
 
     return 0;
@@ -147,21 +152,6 @@ static int identifier(FILE *in, char* buffer, size_t buf_len)
     return read;
 }
 
-static int symbol(FILE *in, char *symbol) {
-    int read = 0;
-    char c;
-
-    whitespace(in);
-    while((c = fgetc(in)) != EOF) {
-        if(c != symbol[read++]) {
-            ungetc(c, in);
-            return read;
-        }
-    }
-
-    return read;
-}
-
 static long number(FILE *in) {
     int read = 0;
     char c;
@@ -184,7 +174,7 @@ static long number(FILE *in) {
 }
 
 static long character(struct compiler_args *args, FILE *in) {
-    char c;
+    char c = 0;
     int i;
     long value = 0;
 
