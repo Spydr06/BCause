@@ -99,6 +99,17 @@ static inline SYSCALL_TYPE __syscall3(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_T
 #define SYS_setuid 105
 #define SYS_time 201
 
+/* The `main` function must be declared in any B program */
+extern void B_FN(main)(void);
+void B_FN(exit)(void);
+
+/* entry point of any B program */
+void _start(void) __asm__ ("_start"); /* assure, that _start is really named _start in asm */
+void _start(void) {
+    B_FN(main)();
+    B_FN(exit)();
+}
+
 /* The i-th character of the string is returned */
 B_TYPE B_FN(_char)(B_TYPE string, B_TYPE i) __asm__ ("char"); /* alias name */
 B_TYPE B_FN(_char)(B_TYPE string, B_TYPE i) {
