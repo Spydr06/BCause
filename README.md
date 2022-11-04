@@ -1,8 +1,8 @@
 # BCause - B compiler for modern systems
 
-**BCause** is a compiler for the **B** programming language, developed by *Ken Thompson* and *Dennis Ritchie* at *Bell Labs* in *1969*, later getting replaced by **C**. BCause is written in C and uses, apart from the C standard library, absolutely zero external dependencies.
+**BCause** is a compiler for the **B** programming language, developed by *Ken Thompson* and *Dennis Ritchie* at *Bell Labs* in *1969*, later getting replaced by **C**. BCause is written in C99 and relies on a minimal set of dependencies, namely `libc` and the GNU binutils.
 
-This repository also includes a `libb` implementation, B's standard library. It requires zero dependencies, not even libc.
+This repository also includes a `libb.a` implementation, B's standard library. It requires zero dependencies, not even libc.
 
 ### Current Status
 
@@ -11,6 +11,7 @@ This repository also includes a `libb` implementation, B's standard library. It 
 - [ ] `auto` & `extrn` variables
 - [ ] control flow statements
 - [ ] expressions
+- [x] `libb.a` standard library
 
 ### Installation
 
@@ -45,6 +46,6 @@ BCause is licensed under the MIT License. See `LICENSE` in this repository for f
 
 ### References
 
-[Bell Labs User's Reference to B](https://www.bell-labs.com/usr/dmr/www/kbman.pdf) by Ken Thompson (Jan. 7, 1972)
+- [Bell Labs User's Reference to B](https://www.bell-labs.com/usr/dmr/www/kbman.pdf) by Ken Thompson (Jan. 7, 1972)
 
-Wikipedia entry: [B (programming language)](https://en.wikipedia.org/wiki/B_(programming_language))
+- Wikipedia entry: [B (programming language)](https://en.wikipedia.org/wiki/B_(programming_language))
