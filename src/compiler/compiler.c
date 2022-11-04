@@ -33,17 +33,16 @@ int compile(struct compiler_args *args)
     char* buf;
     char* asm_file = A_S;
     char* obj_file = A_O;
-    size_t buf_len;
-    FILE* buffer = open_memstream(&buf, &buf_len);
-    FILE* out; 
+    size_t buf_len, len;
+    FILE *buffer = open_memstream(&buf, &buf_len);
+    FILE *out, *in; 
     int exit_code;
 
     // open every provided `.b` file and generate assembly for it
     for(int i = 0; i < args->num_input_files; i++) {
-        size_t len = strlen(args->input_files[i]);
+        len = strlen(args->input_files[i]);
         if(len >= 2 && args->input_files[i][len - 1] == 'b' && args->input_files[i][len - 2] == '.') {
-            FILE* in = fopen(args->input_files[i], "r");
-            if(!in) {
+            if(!(in = fopen(args->input_files[i], "r"))) {
                 eprintf(args->arg0, "%s: %s\ncompilation terminated.\n", args->input_files[i], strerror(errno));
                 return 1;
             }
@@ -54,8 +53,7 @@ int compile(struct compiler_args *args)
 
     // write the buffer to an assembly file
     fclose(buffer);
-    out = fopen(asm_file, "w");
-    if(!out) {
+    if(!(out = fopen(asm_file, "w"))) {
         eprintf(args->arg0, "cannot open file " COLOR_BOLD_WHITE "‘%s’:" COLOR_RESET " %s.", A_S, strerror(errno));
         return 1;
     }
@@ -184,25 +182,25 @@ static long character(struct compiler_args *args, FILE *in) {
         
         if(c == '*') {
             switch(c = fgetc(in)) {
-                case '0':
-                case 'e':
-                    c = '\0';
-                    break;
-                case '(':
-                case ')':
-                case '*':
-                case '\'':
-                case '"':
-                    break;
-                case 't':
-                    c = '\t';
-                    break;
-                case 'n':
-                    c = '\n';
-                    break;
-                default:
-                    eprintf(args->arg0, "undefined escape character ‘*%c’", c);
-                    exit(1);
+            case '0':
+            case 'e':
+                c = '\0';
+                break;
+            case '(':
+            case ')':
+            case '*':
+            case '\'':
+            case '"':
+                break;
+            case 't':
+                c = '\t';
+                break;
+            case 'n':
+                c = '\n';
+                break;
+            default:
+                eprintf(args->arg0, "undefined escape character ‘*%c’", c);
+                exit(1);
             }
         }
         value |= c << (i * 8);
