@@ -17,6 +17,7 @@ bcause.out:
 libb: libb.a
 libb.a: libb.o
 	ar ruv $@ $<
+	ranlib $@
 
 libb.o:
 	${CC} ${CFLAGS} ${CFLAGS_EXT} ${LIBB_FILES} -o $@
