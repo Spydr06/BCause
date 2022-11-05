@@ -12,6 +12,54 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
+#define ASSERT_CHAR(args, in, expect, message) do { \
+    if(fgetc(in) != expect) {                       \
+        eprintf(args->arg0, message);               \
+        exit(1);                                    \
+    }} while(0)
+
+enum asm_register {
+    RAX,
+    RBX,
+    RCX,
+    RDX,
+    RDI,
+    RSI,
+    RBP,
+    RSP,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15
+};
+
+static const char* registers[R15 + 1] = {
+    "%rax",
+    "%rbx",
+    "%rcx",
+    "%rdx",
+    "%rdi",
+    "%rsi",
+    "%rbp",
+    "%rsp",
+    "%r8",
+    "%r9",
+    "%r10",
+    "%r11",
+    "%r12",
+    "%r13",
+    "%r14",
+    "%r15"
+};
+
+static inline const char* strregister(enum asm_register reg) {
+    return registers[reg];
+}
+
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
 static int subprocess(char *arg0, const char *p_name, char *const *p_arg);
 
@@ -320,13 +368,182 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
         fprintf(out, "  .zero %ld\n", args->word_size * num);
 }
 
+static void expression(struct compiler_args *args, enum asm_register reg, FILE *in, FILE *out)
+{
+    char c;
+    long value;
+
+    whitespace(in);
+
+    switch(c = fgetc(in)) {
+    case '\'':
+        if((value = character(args, in)))
+            fprintf(out, "  mov $%lu, %s\n", value, strregister(reg));
+        else
+            fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
+        break;
+
+    case EOF:
+        eprintf(args->arg0, "unexpected end of file, expect expression");
+        exit(1);
+        
+    default:
+        if(isdigit(c)) { /* integer literal */
+            ungetc(c, in);
+            if((value = number(in)))
+                fprintf(out, "  mov $%lu, %s\n", value, strregister(reg));
+            else
+                fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
+        }
+        else {
+            eprintf(args->arg0, "unexpected character ‘%c’, expect expression\n", c);
+            exit(1);
+        }
+    }
+}                
+
+static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, bool in_switch)
+{
+    char c;
+    static char buffer[BUFSIZ];
+    static long stmt_id = 0; /* unique id for each statement for generating labels */
+    long id;
+    int i;
+
+    whitespace(in);
+    switch (c = fgetc(in)) {
+    case '{':
+        whitespace(in);
+        while((c = fgetc(in)) != '}') {
+            ungetc(c, in);
+            statement(args, in, out, fn_ident, in_switch);
+            whitespace(in);
+        }
+        break;
+    
+    case ';':
+        break; /* null statement */
+
+    default:
+        if(isalpha(c)) {
+            ungetc(c, in);
+            identifier(in, buffer, BUFSIZ);
+            whitespace(in);
+            
+            if(strcmp(buffer, "goto") == 0) { /* goto statement */
+                if(!identifier(in, buffer, BUFSIZ)) {
+                    eprintf(args->arg0, "expect label name after ‘goto’\n");
+                    exit(1);
+                }
+                fprintf(out, "  jmp .L.label.%s\n", buffer);
+                whitespace(in);
+                ASSERT_CHAR(args, in, ';', "expect ‘;’ after ‘goto’ statement\n");
+                return;
+            }
+            else if(strcmp(buffer, "return") == 0) { /* return statement */
+                if((c = fgetc(in)) != ';') {
+                    if(c != '(') {
+                        eprintf(args->arg0, "expect ‘(’ or ‘;’ after ‘return’\n");
+                        exit(1);
+                    }
+                    expression(args, RAX, in, out);
+                    whitespace(in);
+                    ASSERT_CHAR(args, in, ')', "expect ‘)’ after ‘return’ statement\n");
+                    whitespace(in);
+                    ASSERT_CHAR(args, in, ';', "expect ‘;’ after ‘return’ statement\n");
+                }
+                fprintf(out, "  jmp .L.return.%s\n", fn_ident);
+                return;
+            }
+            else if(strcmp(buffer, "if") == 0) { /* conditional statement */
+                id = stmt_id++;
+
+                ASSERT_CHAR(args, in, '(', "expect ‘(’ after ‘if’\n");
+                expression(args, RAX, in, out);
+                fprintf(out, "  cmp $0, %%rax\n  je .L.else.%lu\n", id);
+                whitespace(in);
+                ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
+
+                statement(args, in, out, fn_ident, in_switch);
+                fprintf(out, "  jmp .L.end.%lu\n.L.else.%lu:\n", id, id);
+
+                whitespace(in);
+                memset(buffer, 0, 6 * sizeof(char));
+                if((buffer[0] = fgetc(in)) == 'e' &&
+                   (buffer[1] = fgetc(in)) == 'l' &&
+                   (buffer[2] = fgetc(in)) == 's' &&
+                   (buffer[3] = fgetc(in)) == 'e' && 
+                   !isalnum((buffer[4] = fgetc(in)))) {
+                    statement(args, in, out, fn_ident, in_switch);
+                }
+                else {
+                    for(i = 4; i >= 0; i--) {
+                        if(buffer[i])
+                            ungetc(buffer[i], in);
+                    }
+                }
+
+                fprintf(out, ".L.end.%lu:\n", id);
+                return;
+            }
+            else if(strcmp(buffer, "while") == 0) { /* while statement */
+                id = stmt_id++;
+
+                ASSERT_CHAR(args, in, '(', "expect ‘(’ after ‘while’\n");
+                expression(args, RAX, in, out);
+                fprintf(out, 
+                    ".L.start.%lu:\n"
+                    "  cmp $0, %%rax\n"
+                    "  je .L.end.%lu\n",
+                    id, id
+                );
+                whitespace(in);
+                ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
+
+                statement(args, in, out, fn_ident, in_switch);
+                fprintf(out, "  jmp .L.start.%lu\n.L.end.%lu:\n", id, id);
+                return;
+            }
+            else {
+                switch(c = fgetc(in)) {
+                case ':': /* label */
+                    fprintf(out, ".L.label.%s:\n", buffer);
+                    statement(args, in, out, fn_ident, in_switch);
+                    return;
+                default:
+                    eprintf(args->arg0, "unexpected character ‘%c’, expect expression\n", c);
+                    exit(1);
+                }
+            }
+        }
+        else if(c == EOF)
+            eprintf(args->arg0, "unexpected end of file, expect statement\n");
+        else
+            eprintf(args->arg0, "unexpected character ‘%c’, expect statement\n", c);
+        exit(1);
+    }
+}
+
 static void function(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
 {
     fprintf(out, ".text\n.type %s, @function\n%s:\n", identifier, identifier);
-    
-    fprintf(out, "  push %%rbp\n  mov %%rsp, %%rbp\n");
 
-    fprintf(out, ".L.return.%s:\n  mov %%rbp, %%rsp\n  pop %%rbp\n  ret\n", identifier);
+    ASSERT_CHAR(args, in, ')', "expect ‘)’ after function declaration\n");
+
+    fprintf(out,
+        "  push %%rbp\n"
+        "  mov %%rsp, %%rbp\n"
+    );
+
+    statement(args, in, out, identifier, false);
+    
+    fprintf(out, 
+        ".L.return.%s:\n"
+        "  mov %%rbp, %%rsp\n"
+        "  pop %%rbp\n"
+        "  ret\n",
+        identifier
+    );
 }
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
