@@ -24,7 +24,9 @@ static inline void help(char *arg0)
         "Options:\n"
         "--help    Display this information.\n"
         "--version Display compiler version information.\n"
-        "-o <file> Place the output into <file>\n",
+        "-o <file> Place the output into <file>.\n"
+		"-S        Compile only; do not assemble or link.\n"
+        "-c        Compile and assemble, but do not link.\n",
         arg0
     );
 }
@@ -62,6 +64,9 @@ int main(int argc, char **argv)
             cargs.do_assembling = false;
             cargs.do_linking = false;
         }
+        else if(strcmp(argv[i], "-c") == 0) {
+			cargs.do_linking = false;
+        }
         else if(argv[i][0] == '-') {
             eprintf(argv[0], "unrecognized command-line option " COLOR_BOLD_WHITE "‘%s’\n" COLOR_RESET, argv[i]);
             return 1;
@@ -76,5 +81,5 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    return compile(&cargs);    
+    return compile(&cargs);
 }
