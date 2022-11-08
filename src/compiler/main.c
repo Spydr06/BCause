@@ -35,14 +35,15 @@ int main(int argc, char **argv)
 {
     char *input_files[argc - 1]; /* we can only have a maximum of argc input files */
 
-    struct compiler_args cargs;
-    cargs.output_file = A_OUT;
-    cargs.num_input_files = 0;
-    cargs.input_files = input_files;
-    cargs.do_assembling = true;
-    cargs.do_linking = true;
-    cargs.word_size = X86_64_WORD_SIZE;
-    cargs.arg0 = argv[0];
+    struct compiler_args cargs = {
+        .arg0 = argv[0],
+        .output_file = A_OUT,
+        .num_input_files = 0,
+        .input_files = input_files,
+        .do_assembling = true,
+        .do_linking = true,
+        .word_size = X86_64_WORD_SIZE,
+    };
 
     for(int i = 1; i < argc; i++)
     {
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
         }
         else if(strcmp(argv[i], "-o") == 0) {
             if(argc - i <= 1) {
-                eprintf(argv[0], "missing filename after " COLOR_BOLD_WHITE "‘%s’\n" COLOR_RESET, argv[i]);
+                eprintf(argv[0], "missing filename after " QUOTE_FMT("%s") "\n", argv[i]);
             }
             cargs.output_file = argv[++i];
         }
@@ -68,7 +69,7 @@ int main(int argc, char **argv)
 			cargs.do_linking = false;
         }
         else if(argv[i][0] == '-') {
-            eprintf(argv[0], "unrecognized command-line option " COLOR_BOLD_WHITE "‘%s’\n" COLOR_RESET, argv[i]);
+            eprintf(argv[0], "unrecognized command-line option " QUOTE_FMT("%s") "\n", argv[i]);
             return 1;
         }
         else {

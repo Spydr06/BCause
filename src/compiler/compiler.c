@@ -103,7 +103,7 @@ int compile(struct compiler_args *args)
     // write the buffer to an assembly file
     fclose(buffer);
     if(!(out = fopen(asm_file, "w"))) {
-        eprintf(args->arg0, "cannot open file " COLOR_BOLD_WHITE "‘%s’:" COLOR_RESET " %s.", A_S, strerror(errno));
+        eprintf(args->arg0, "cannot open file " QUOTE_FMT("%s") " %s.", A_S, strerror(errno));
         return 1;
     }
     fwrite(buf, buf_len, 1, out);
@@ -150,13 +150,13 @@ static int subprocess(char *arg0, const char *p_name, char *const *p_arg)
 
     if(pid < 0)
     {
-        eprintf(arg0, "error forking parent process ‘%s’\n", arg0);
+        eprintf(arg0, "error forking parent process " QUOTE_FMT("%s") "\n", arg0);
         exit(1);
     }
 
     if(pid == 0 && execvp(p_name, p_arg) == -1)
     {
-        eprintf(arg0, "error executing ‘%s’: %s\n", p_name, strerror(errno));
+        eprintf(arg0, "error executing " QUOTE_FMT("%s") ": %s\n", p_name, strerror(errno));
         exit(1);
     }
 
@@ -248,7 +248,7 @@ static long character(struct compiler_args *args, FILE *in) {
                 c = '\n';
                 break;
             default:
-                eprintf(args->arg0, "undefined escape character ‘*%c’", c);
+                eprintf(args->arg0, "undefined escape character " QUOTE_FMT("*%c"), c);
                 exit(1);
             }
         }
@@ -314,7 +314,7 @@ static void global(struct compiler_args *args, FILE *in, FILE *out, char *identi
         } while((c = fgetc(in)) == ',');
 
         if(c != ';') {
-            eprintf(args->arg0, "expect ‘;’ at end of declaration\n");
+            eprintf(args->arg0, "expect " QUOTE_FMT(";") " at end of declaration\n");
             exit(1);
         }
     }
@@ -332,13 +332,13 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
         ungetc(c, in);
         num = number(in);
         if(num == EOF) {
-            eprintf(args->arg0, "unexpected end of file, expect vector size after ‘[’\n");
+            eprintf(args->arg0, "unexpected end of file, expect vector size after " QUOTE_FMT("[") "\n");
             exit(1);
         }
         whitespace(in);
 
         if(fgetc(in) != ']') {
-            eprintf(args->arg0, "expect ‘]’ after vector size\n");
+            eprintf(args->arg0, "expect " QUOTE_FMT("]") " after vector size\n");
             exit(1);
         }
     }
@@ -361,7 +361,7 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
         } while((c = fgetc(in)) == ',');
 
         if(c != ';') {
-            eprintf(args->arg0, "expect ‘;’ at end of declaration\n");
+            eprintf(args->arg0, "expect " QUOTE_FMT(";") " at end of declaration\n");
             exit(1);
         }
     }
@@ -377,11 +377,16 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
     whitespace(in);
 
     switch(c = fgetc(in)) {
-    case '\'':
+    case '\'': /* character literal */
         if((value = character(args, in)))
             fprintf(out, "  mov $%lu, %s\n", value, strregister(reg));
         else
             fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
+        break;
+    
+    case '(': /* parentheses */
+        expression(args, reg, in, out);
+        ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after " QUOTE_FMT("(<expr>"));
         break;
 
     case EOF:
@@ -397,7 +402,7 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
                 fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
         }
         else {
-            eprintf(args->arg0, "unexpected character ‘%c’, expect expression\n", c);
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
             exit(1);
         }
     }
@@ -434,25 +439,25 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
             
             if(strcmp(buffer, "goto") == 0) { /* goto statement */
                 if(!identifier(in, buffer, BUFSIZ)) {
-                    eprintf(args->arg0, "expect label name after ‘goto’\n");
+                    eprintf(args->arg0, "expect label name after " QUOTE_FMT("goto") "\n");
                     exit(1);
                 }
                 fprintf(out, "  jmp .L.label.%s\n", buffer);
                 whitespace(in);
-                ASSERT_CHAR(args, in, ';', "expect ‘;’ after ‘goto’ statement\n");
+                ASSERT_CHAR(args, in, ';', "expect " QUOTE_FMT(";") " after " QUOTE_FMT("goto") " statement\n");
                 return;
             }
             else if(strcmp(buffer, "return") == 0) { /* return statement */
                 if((c = fgetc(in)) != ';') {
                     if(c != '(') {
-                        eprintf(args->arg0, "expect ‘(’ or ‘;’ after ‘return’\n");
+                        eprintf(args->arg0, "expect " QUOTE_FMT("(") " or " QUOTE_FMT(";") " after " QUOTE_FMT("return") "\n");
                         exit(1);
                     }
                     expression(args, RAX, in, out);
                     whitespace(in);
-                    ASSERT_CHAR(args, in, ')', "expect ‘)’ after ‘return’ statement\n");
+                    ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after " QUOTE_FMT("return") " statement\n");
                     whitespace(in);
-                    ASSERT_CHAR(args, in, ';', "expect ‘;’ after ‘return’ statement\n");
+                    ASSERT_CHAR(args, in, ';', "expect " QUOTE_FMT(";") " after " QUOTE_FMT("return") " statement\n");
                 }
                 fprintf(out, "  jmp .L.return.%s\n", fn_ident);
                 return;
@@ -460,11 +465,11 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
             else if(strcmp(buffer, "if") == 0) { /* conditional statement */
                 id = stmt_id++;
 
-                ASSERT_CHAR(args, in, '(', "expect ‘(’ after ‘if’\n");
+                ASSERT_CHAR(args, in, '(', "expect " QUOTE_FMT("(") " after " QUOTE_FMT("if") "\n");
                 expression(args, RAX, in, out);
                 fprintf(out, "  cmp $0, %%rax\n  je .L.else.%lu\n", id);
                 whitespace(in);
-                ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
+                ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after condition\n");
 
                 statement(args, in, out, fn_ident, -1, NULL);
                 fprintf(out, "  jmp .L.end.%lu\n.L.else.%lu:\n", id, id);
@@ -491,7 +496,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
             else if(strcmp(buffer, "while") == 0) { /* while statement */
                 id = stmt_id++;
 
-                ASSERT_CHAR(args, in, '(', "expect ‘(’ after ‘while’\n");
+                ASSERT_CHAR(args, in, '(', "expect " QUOTE_FMT("(") " after " QUOTE_FMT("while") "\n");
                 expression(args, RAX, in, out);
                 fprintf(out, 
                     ".L.start.%lu:\n"
@@ -500,7 +505,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     id, id
                 );
                 whitespace(in);
-                ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
+                ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after condition\n");
 
                 statement(args, in, out, fn_ident, -1, NULL);
                 fprintf(out, "  jmp .L.start.%lu\n.L.end.%lu:\n", id, id);
@@ -532,7 +537,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 id = stmt_id++;
 
                 if(switch_id < 0) {
-                    eprintf(args->arg0, "unexpected ‘case’ outside of ‘switch’ statements\n");
+                    eprintf(args->arg0, "unexpected " QUOTE_FMT("case") " outside of " QUOTE_FMT("switch") " statements\n");
                     exit(1);
                 }
 
@@ -547,16 +552,16 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                         break;
                     }
                     
-                    eprintf(args->arg0, "unexpected character ‘%c’, expect constant after ‘case’\n", c);
+                    eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect constant after " QUOTE_FMT("case") "\n", c);
                     exit(1);
                 }
                 
                 if(value == EOF) {
-                    eprintf(args->arg0, "unexpected end of file, expect constant after ‘case’\n");
+                    eprintf(args->arg0, "unexpected end of file, expect constant after " QUOTE_FMT("case") "\n");
                     exit(1);
                 }
                 whitespace(in);
-                ASSERT_CHAR(args, in, ':', "expect ‘:’ after ‘case’\n");
+                ASSERT_CHAR(args, in, ':', "expect " QUOTE_FMT(":") " after " QUOTE_FMT("case") "\n");
                 list_push(cases, (void*) value);
 
                 fprintf(out, ".L.case.%ld.%ld:\n", switch_id, value);
@@ -570,7 +575,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     statement(args, in, out, fn_ident, switch_id, cases);
                     return;
                 default:
-                    eprintf(args->arg0, "unexpected character ‘%c’, expect expression\n", c);
+                    eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
                     exit(1);
                 }
             }
@@ -578,7 +583,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
         else if(c == EOF)
             eprintf(args->arg0, "unexpected end of file, expect statement\n");
         else
-            eprintf(args->arg0, "unexpected character ‘%c’, expect statement\n", c);
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect statement\n", c);
         exit(1);
     }
 }
@@ -587,7 +592,7 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *iden
 {
     fprintf(out, ".text\n.type %s, @function\n%s:\n", identifier, identifier);
 
-    ASSERT_CHAR(args, in, ')', "expect ‘)’ after function declaration\n");
+    ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after function declaration\n");
 
     fprintf(out,
         "  push %%rbp\n"
