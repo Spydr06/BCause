@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "list.h"
 
 #define _XOPEN_SOURCE 700
 #include <stdio.h>
@@ -400,15 +401,16 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
             exit(1);
         }
     }
-}                
+}
 
-static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, bool in_switch)
+static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, long switch_id, struct list *cases)
 {
     char c;
     static char buffer[BUFSIZ];
     static long stmt_id = 0; /* unique id for each statement for generating labels */
-    long id;
-    int i;
+    long id, value;
+    long i;
+    struct list switch_case_list;
 
     whitespace(in);
     switch (c = fgetc(in)) {
@@ -416,7 +418,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
         whitespace(in);
         while((c = fgetc(in)) != '}') {
             ungetc(c, in);
-            statement(args, in, out, fn_ident, in_switch);
+            statement(args, in, out, fn_ident, switch_id, cases);
             whitespace(in);
         }
         break;
@@ -464,7 +466,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 whitespace(in);
                 ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
 
-                statement(args, in, out, fn_ident, in_switch);
+                statement(args, in, out, fn_ident, -1, NULL);
                 fprintf(out, "  jmp .L.end.%lu\n.L.else.%lu:\n", id, id);
 
                 whitespace(in);
@@ -474,7 +476,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                    (buffer[2] = fgetc(in)) == 's' &&
                    (buffer[3] = fgetc(in)) == 'e' && 
                    !isalnum((buffer[4] = fgetc(in)))) {
-                    statement(args, in, out, fn_ident, in_switch);
+                    statement(args, in, out, fn_ident, -1, NULL);
                 }
                 else {
                     for(i = 4; i >= 0; i--) {
@@ -500,15 +502,72 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 whitespace(in);
                 ASSERT_CHAR(args, in, ')', "expect ‘)’ after condition\n");
 
-                statement(args, in, out, fn_ident, in_switch);
+                statement(args, in, out, fn_ident, -1, NULL);
                 fprintf(out, "  jmp .L.start.%lu\n.L.end.%lu:\n", id, id);
+                return;
+            }
+            else if(strcmp(buffer, "switch") == 0) { /* switch statement */
+                id = stmt_id++;
+
+                expression(args, RAX, in, out);
+                fprintf(out, "  jmp .L.cmp.%ld\n.L.stmts.%ld:\n", id, id);
+
+                memset(&switch_case_list, 0, sizeof(struct list));
+                statement(args, in, out, fn_ident, id, &switch_case_list);
+                fprintf(out, 
+                    "  jmp .L.end.%ld\n"
+                    ".L.cmp.%ld:\n", 
+                    id, id
+                );
+
+                for(i = 0; i < (long) switch_case_list.size; i++)
+                    fprintf(out, "  cmp $%ld, %%rax\n  je .L.case.%lu.%lu\n", (unsigned long) switch_case_list.data[i], id, (unsigned long) switch_case_list.data[i]);
+
+                fprintf(out, ".L.end.%ld:\n", id);
+
+                list_free(&switch_case_list); 
+                return;
+            }
+            else if(strcmp(buffer, "case") == 0) { /* case statement */
+                id = stmt_id++;
+
+                if(switch_id < 0) {
+                    eprintf(args->arg0, "unexpected ‘case’ outside of ‘switch’ statements\n");
+                    exit(1);
+                }
+
+                switch (c = fgetc(in)) {
+                case '\'':
+                    value = character(args, in);
+                    break;
+                default:
+                    if(isdigit(c)) {
+                        ungetc(c, in);
+                        value = number(in);
+                        break;
+                    }
+                    
+                    eprintf(args->arg0, "unexpected character ‘%c’, expect constant after ‘case’\n", c);
+                    exit(1);
+                }
+                
+                if(value == EOF) {
+                    eprintf(args->arg0, "unexpected end of file, expect constant after ‘case’\n");
+                    exit(1);
+                }
+                whitespace(in);
+                ASSERT_CHAR(args, in, ':', "expect ‘:’ after ‘case’\n");
+                list_push(cases, (void*) value);
+
+                fprintf(out, ".L.case.%ld.%ld:\n", switch_id, value);
+                statement(args, in, out, fn_ident, switch_id, cases);
                 return;
             }
             else {
                 switch(c = fgetc(in)) {
                 case ':': /* label */
                     fprintf(out, ".L.label.%s:\n", buffer);
-                    statement(args, in, out, fn_ident, in_switch);
+                    statement(args, in, out, fn_ident, switch_id, cases);
                     return;
                 default:
                     eprintf(args->arg0, "unexpected character ‘%c’, expect expression\n", c);
@@ -535,7 +594,7 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *iden
         "  mov %%rsp, %%rbp\n"
     );
 
-    statement(args, in, out, identifier, false);
+    statement(args, in, out, identifier, -1, NULL);
     
     fprintf(out, 
         ".L.return.%s:\n"
