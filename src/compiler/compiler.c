@@ -408,6 +408,7 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
     char c;
     long value;
     bool is_lvalue = false;
+    char* di;
 
     whitespace(in);
 
@@ -496,9 +497,39 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
             exit(1);
         }
     }
-    
+
 prefix_end:
 
+    whitespace(in);
+
+    switch(c = fgetc(in)) {
+    case '+':
+    case '-':
+    case '*':
+        fprintf(out, "  push %s\n", strregister(reg));
+        expression(args, reg, in, out);
+        di = reg == RDI ? "%rax" : "%rdi";
+        fprintf(out, "  pop %s\n  %s %s, %s\n",
+            di,
+            c == '+' ? "add" : c == '-' ? "sub" : "imul",
+            di,
+            strregister(reg)
+        );
+        break;
+    
+    case '/':
+    case '%':
+        fprintf(out, "  push %s\n", strregister(reg));
+        expression(args, reg, in, out);
+        di = reg == RAX ? "%rdi" : "%rax";
+        fprintf(out, "  pop %s\n  cqo\n  idiv %s\n", di, reg == RAX ? di : strregister(reg));
+        if(c == '%')
+            fprintf(out, "  mov %%rdx, %s\n", strregister(reg));
+        break;
+
+    default:
+        ungetc(c, in);
+    }
     
     return is_lvalue;
 }
