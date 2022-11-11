@@ -369,12 +369,41 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
         fprintf(out, "  .zero %ld\n", args->word_size * num);
 }
 
-static void expression(struct compiler_args *args, enum asm_register reg, FILE *in, FILE *out)
+static void lvalue(struct compiler_args *args, FILE *in, char* out) {
+    char c;
+    size_t i;
+    char buffer[BUFSIZ];
+
+    memset(out, 0, BUFSIZ);
+    switch(c = fgetc(in)) {
+    default:
+        if(isalpha(c)) {
+            ungetc(c, in);
+            identifier(in, buffer, BUFSIZ);
+
+            for(i = 0; i < args->locals.size; i++) {
+                if(strcmp(buffer, args->locals.data[i]) == 0) {
+                    sprintf(out, "-%lu(%%rbp)", i * X86_64_WORD_SIZE);
+                    return;
+                }
+            }
+
+            sprintf(out, "%s(%%rip)", buffer);
+        }
+        else {
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect lvalue\n", c);
+            exit(1);
+        }
+    }
+}
+
+static bool expression(struct compiler_args *args, enum asm_register reg, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
     size_t i;
     char c;
     long value;
+    bool is_lvalue = false;
 
     whitespace(in);
 
@@ -391,6 +420,46 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
         ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after " QUOTE_FMT("(<expr>"));
         break;
 
+    case '!': /* not operator */
+        expression(args, reg, in, out);
+        fprintf(out, "  cmp $0, %%rax\n  sete %%al\n  movzx %%al, %s\n", strregister(reg));
+        break;
+    
+    case '-':
+        if((c = fgetc(in)) == '-') { /* prefix decrement operator */
+            lvalue(args, in, buffer);
+            fprintf(out, "  sub %s, $1\n  movq %s, %s", buffer, buffer, strregister(reg));
+            is_lvalue = true;
+        }
+        else { /* negation operator */
+            ungetc(c, in);
+            expression(args, reg, in, out);
+            fprintf(out, "  neg %s\n", strregister(reg));
+        }
+        break;
+    
+    case '+': /* prefix increment operator */
+        if((c = fgetc(in)) != '+') {
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT("+") "\n", c);
+            exit(1);
+        }
+        lvalue(args, in, buffer);
+        fprintf(out, "  add %s, $1\n  movq %s, %s\n", buffer, buffer, strregister(reg));
+        is_lvalue = true;
+        break;
+
+    case '*': /* indirection operator */
+        expression(args, reg, in, out);
+        fprintf(out, "  mov (%s), %s\n", strregister(reg), strregister(reg));
+        is_lvalue = true;
+        break;
+    
+    case '&': /* address operator */
+        lvalue(args, in, buffer);
+        fprintf(out, "  lea %s, %s\n", buffer, strregister(reg));
+        is_lvalue = true;
+        break;
+
     case EOF:
         eprintf(args->arg0, "unexpected end of file, expect expression");
         exit(1);
@@ -404,6 +473,8 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
                 fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
         }
         else if(isalpha(c)) { /* identifier */
+            is_lvalue = true;
+
             ungetc(c, in);
             identifier(in, buffer, BUFSIZ);
 
@@ -424,6 +495,8 @@ static void expression(struct compiler_args *args, enum asm_register reg, FILE *
     
     prefix_end:
         ;
+    
+    return is_lvalue;
 }
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, long switch_id, struct list *cases)
