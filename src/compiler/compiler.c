@@ -82,13 +82,13 @@ int compile(struct compiler_args *args)
     char* buf;
     char* asm_file = A_S;
     char* obj_file = A_O;
-    size_t buf_len, len;
+    size_t buf_len, len, i;
     FILE *buffer = open_memstream(&buf, &buf_len);
     FILE *out, *in; 
     int exit_code;
 
     // open every provided `.b` file and generate assembly for it
-    for(int i = 0; i < args->num_input_files; i++) {
+    for(i = 0; i < (size_t) args->num_input_files; i++) {
         len = strlen(args->input_files[i]);
         if(len >= 2 && args->input_files[i][len - 1] == 'b' && args->input_files[i][len - 2] == '.') {
             if(!(in = fopen(args->input_files[i], "r"))) {
@@ -99,6 +99,10 @@ int compile(struct compiler_args *args)
             fclose(in);
         }
     }
+
+    for(i = 0; i < args->locals.size; i++)
+        free(args->locals.data[i]);
+    list_free(&args->locals);
 
     // write the buffer to an assembly file
     fclose(buffer);
@@ -372,7 +376,7 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
 static void lvalue(struct compiler_args *args, FILE *in, char* out) {
     char c;
     size_t i;
-    char buffer[BUFSIZ];
+    char buffer[BUFSIZ - 7];
 
     memset(out, 0, BUFSIZ);
     switch(c = fgetc(in)) {
@@ -383,12 +387,12 @@ static void lvalue(struct compiler_args *args, FILE *in, char* out) {
 
             for(i = 0; i < args->locals.size; i++) {
                 if(strcmp(buffer, args->locals.data[i]) == 0) {
-                    sprintf(out, "-%lu(%%rbp)", i * X86_64_WORD_SIZE);
+                    snprintf(out, BUFSIZ - 1, "-%lu(%%rbp)", i * X86_64_WORD_SIZE);
                     return;
                 }
             }
 
-            sprintf(out, "%s(%%rip)", buffer);
+            snprintf(out, BUFSIZ - 1, "%s(%%rip)", buffer);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect lvalue\n", c);
@@ -493,8 +497,8 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
         }
     }
     
-    prefix_end:
-        ;
+prefix_end:
+
     
     return is_lvalue;
 }
