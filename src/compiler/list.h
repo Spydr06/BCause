@@ -10,6 +10,7 @@ struct list {
 };
 
 void list_push(struct list *list, void *item);
+void list_clear(struct list *list);
 void list_free(struct list *list);
 
 #endif /* BCAUSE_LIST_H */

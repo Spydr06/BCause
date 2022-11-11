@@ -2,6 +2,7 @@
 #define BCAUSE_COMPILER_H
 
 #include <stdbool.h>
+#include "list.h"
 
 #define A_OUT "a.out"
 #define A_S   "a.S"
@@ -25,6 +26,8 @@ struct compiler_args {
 
     bool do_linking;    /* should the compiler link? */
     bool do_assembling; /* should the compiler assemble? */
+
+    struct list locals; /* local variables */
 };
 
 #ifdef __GNUC__

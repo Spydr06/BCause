@@ -1,7 +1,11 @@
 SHELL = /bin/sh
 
 CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -O2
-CFLAGS_EXT = -nostdlib -Wno-incompatible-library-redeclaration -Wno-builtin-declaration-mismatch -c
+CFLAGS_LIBB = -nostdlib -c 					\
+	-Wno-incompatible-library-redeclaration \
+	-Wno-builtin-declaration-mismatch       \
+	-ffreestanding
+
 COMPILER_FILES = $(shell find src/compiler -name '*.c')
 LIBB_FILES = $(shell find src/libb -name '*.c')
 
@@ -29,7 +33,7 @@ ${LIBB_BIN}: libb.o
 	ranlib $@
 
 libb.o:
-	${CC} ${CFLAGS} ${CFLAGS_EXT} ${LIBB_FILES} -o $@
+	${CC} ${CFLAGS} ${CFLAGS_LIBB} ${LIBB_FILES} -o $@
 
 .PHONY: clean
 clean:
