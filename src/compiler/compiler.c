@@ -61,6 +61,25 @@ static inline const char* strregister(enum asm_register reg) {
     return registers[reg];
 }
 
+enum cmp_operator {
+    CMP_LT = 0, /* less-than operator */
+    CMP_LE, /* less-than-equal operator */
+    CMP_GT, /* greater-than operator */
+    CMP_GE, /* greater-than-equal operator */
+    CMP_EQ, /* equality operator */
+    CMP_NE  /* non-equality operator */
+};
+
+const char* cmp_instruction[CMP_NE + 1] = {
+    "setl",
+    "setle",
+    "setg",
+    "setge",
+    "sete",
+    "setne",
+};
+
+static bool expression(struct compiler_args *args, FILE *in, FILE *out);
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
 static int subprocess(char *arg0, const char *p_name, char *const *p_arg);
 
@@ -401,45 +420,136 @@ static void lvalue(struct compiler_args *args, FILE *in, char* out) {
     }
 }
 
-static bool expression(struct compiler_args *args, enum asm_register reg, FILE *in, FILE *out)
+static void cmp_expr(struct compiler_args *args, FILE *in, FILE *out, enum cmp_operator op)
+{
+    fprintf(out, "  push %%rax\n");
+    expression(args, in, out);
+    fprintf(out,
+        "  pop %%rdi\n"
+        "  cmp %%rax, %%rdi\n"
+        "  %s %%al\n"
+        "  movzb %%al, %%rax\n",
+        cmp_instruction[op]
+    );
+}
+
+static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right_is_lvalue)
+{
+    char c;
+    bool is_lvalue = false;
+    
+    switch(c = fgetc(in)) {
+    case '+': /* addition operator */
+    case '-': /* subtraction operator */
+    case '*': /* multiplication operator */
+        fprintf(out, "  push %%rax\n");
+        expression(args, in, out);
+        fprintf(out, "  pop %%rdi\n  %s %%rdi, %%rax\n", c == '+' ? "add" : c == '-' ? "sub" : "imul");
+        break;
+    
+    case '/': /* division operator */
+    case '%': /* modulo operator */
+        fprintf(out, "  push %%rax\n");
+        expression(args, in, out);
+        fprintf(out, "  pop %%rdi\n  cqo\n  idiv %%rdi\n");
+        if(c == '%')
+            fprintf(out, "  mov %%rdx, %%rdi\n");
+        break;
+    
+    case '<':
+        switch(c = fgetc(in)) {
+        case '<': /* shift-left operator */
+            fprintf(out, "  push %%rax\n");
+            expression(args, in, out);
+            fprintf(out, "  mov %%rax, %%rcx\n  pop %%rax\n  shl %%cl, %%rax\n");
+            break;
+        case '=': /* less-than-or-equal operator */
+            cmp_expr(args, in, out, CMP_LE);
+            break;
+        default: /* less-than operator */
+            ungetc(c, in);
+            cmp_expr(args, in, out, CMP_LT);
+        }
+        break;
+
+    case '>':
+        switch(c = fgetc(in)) {
+        case '>': /* shift-right-operator */
+            fprintf(out, "  push %%rax\n");
+            expression(args, in, out);
+            fprintf(out, "  mov %%rax, %%rcx\n  pop %%rax\n  sar %%cl, %%rax\n");
+            break;
+        case '=': /* greater-than-or-equal operator */
+            cmp_expr(args, in, out, CMP_GE);
+            break;
+        default: /* greater-than operator */
+            ungetc(c, in);
+            cmp_expr(args, in, out, CMP_GT);
+        }
+        break;
+
+    case '!': /* inequality operator */
+        if((c = fgetc(in)) != '=') {
+            eprintf(args->arg0, "unknown operator " QUOTE_FMT("!%c") "\n", c);
+            exit(1);
+        }
+        cmp_expr(args, in, out, CMP_NE);
+        break;
+    
+    case '=': /* equality operator */
+        if((c = fgetc(in)) != '=') {
+            eprintf(args->arg0, "unknown operator " QUOTE_FMT("=%c") "\n", c);
+            exit(1);
+        }
+        cmp_expr(args, in, out, CMP_EQ);
+        break;
+
+    default:
+        ungetc(c, in);
+        return right_is_lvalue;
+    }
+    
+    return is_lvalue;
+}
+
+static bool expression(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
     size_t i;
     char c;
     long value;
     bool is_lvalue = false;
-    char* di;
 
     whitespace(in);
 
     switch(c = fgetc(in)) {
     case '\'': /* character literal */
         if((value = character(args, in)))
-            fprintf(out, "  mov $%lu, %s\n", value, strregister(reg));
+            fprintf(out, "  mov $%lu, %%rax\n", value);
         else
-            fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
+            fprintf(out, "  xor %%rax, %%rax\n");
         break;
     
     case '(': /* parentheses */
-        expression(args, reg, in, out);
+        expression(args, in, out);
         ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after " QUOTE_FMT("(<expr>"));
         break;
 
     case '!': /* not operator */
-        expression(args, reg, in, out);
-        fprintf(out, "  cmp $0, %%rax\n  sete %%al\n  movzx %%al, %s\n", strregister(reg));
+        expression(args, in, out);
+        fprintf(out, "  cmp $0, %%rax\n  sete %%al\n  movzx %%al, %%rax\n");
         break;
     
     case '-':
         if((c = fgetc(in)) == '-') { /* prefix decrement operator */
             lvalue(args, in, buffer);
-            fprintf(out, "  sub %s, $1\n  movq %s, %s", buffer, buffer, strregister(reg));
+            fprintf(out, "  sub %s, $1\n  movq %s, %%rax", buffer, buffer);
             is_lvalue = true;
         }
         else { /* negation operator */
             ungetc(c, in);
-            expression(args, reg, in, out);
-            fprintf(out, "  neg %s\n", strregister(reg));
+            expression(args, in, out);
+            fprintf(out, "  neg %%rax\n");
         }
         break;
     
@@ -449,19 +559,19 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
             exit(1);
         }
         lvalue(args, in, buffer);
-        fprintf(out, "  add %s, $1\n  movq %s, %s\n", buffer, buffer, strregister(reg));
+        fprintf(out, "  add %s, $1\n  movq %s, %%rax\n", buffer, buffer);
         is_lvalue = true;
         break;
 
     case '*': /* indirection operator */
-        expression(args, reg, in, out);
-        fprintf(out, "  mov (%s), %s\n", strregister(reg), strregister(reg));
+        expression(args, in, out);
+        fprintf(out, "  mov (%%rax), %%rax\n");
         is_lvalue = true;
         break;
     
     case '&': /* address operator */
         lvalue(args, in, buffer);
-        fprintf(out, "  lea %s, %s\n", buffer, strregister(reg));
+        fprintf(out, "  lea %s, %%rax\n", buffer);
         is_lvalue = true;
         break;
 
@@ -473,9 +583,9 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
         if(isdigit(c)) { /* integer literal */
             ungetc(c, in);
             if((value = number(in)))
-                fprintf(out, "  mov $%lu, %s\n", value, strregister(reg));
+                fprintf(out, "  mov $%lu, %%rax\n", value);
             else
-                fprintf(out, "  xor %s, %s\n", strregister(reg), strregister(reg));
+                fprintf(out, "  xor %%rax, %%rax\n");
         }
         else if(isalpha(c)) { /* identifier */
             is_lvalue = true;
@@ -485,12 +595,12 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
 
             for(i = 0; i < args->locals.size; i++) {
                 if(strcmp(buffer, args->locals.data[i]) == 0) {
-                    fprintf(out, "  mov -%lu(%%rbp), %s\n", i * X86_64_WORD_SIZE, strregister(reg));
+                    fprintf(out, "  mov -%lu(%%rbp), %%rax\n", i * X86_64_WORD_SIZE);
                     goto prefix_end;
                 }
             }
 
-            fprintf(out, "  movq %s(%%rip), %s\n", buffer, strregister(reg));
+            fprintf(out, "  movq %s(%%rip), %%rax\n", buffer);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
@@ -499,39 +609,8 @@ static bool expression(struct compiler_args *args, enum asm_register reg, FILE *
     }
 
 prefix_end:
-
     whitespace(in);
-
-    switch(c = fgetc(in)) {
-    case '+':
-    case '-':
-    case '*':
-        fprintf(out, "  push %s\n", strregister(reg));
-        expression(args, reg, in, out);
-        di = reg == RDI ? "%rax" : "%rdi";
-        fprintf(out, "  pop %s\n  %s %s, %s\n",
-            di,
-            c == '+' ? "add" : c == '-' ? "sub" : "imul",
-            di,
-            strregister(reg)
-        );
-        break;
-    
-    case '/':
-    case '%':
-        fprintf(out, "  push %s\n", strregister(reg));
-        expression(args, reg, in, out);
-        di = reg == RAX ? "%rdi" : "%rax";
-        fprintf(out, "  pop %s\n  cqo\n  idiv %s\n", di, reg == RAX ? di : strregister(reg));
-        if(c == '%')
-            fprintf(out, "  mov %%rdx, %s\n", strregister(reg));
-        break;
-
-    default:
-        ungetc(c, in);
-    }
-    
-    return is_lvalue;
+    return operator(args, in, out, is_lvalue);
 }
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, long switch_id, struct list *cases)
@@ -580,7 +659,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                         eprintf(args->arg0, "expect " QUOTE_FMT("(") " or " QUOTE_FMT(";") " after " QUOTE_FMT("return") "\n");
                         exit(1);
                     }
-                    expression(args, RAX, in, out);
+                    expression(args, in, out);
                     whitespace(in);
                     ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after " QUOTE_FMT("return") " statement\n");
                     whitespace(in);
@@ -595,7 +674,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 id = stmt_id++;
 
                 ASSERT_CHAR(args, in, '(', "expect " QUOTE_FMT("(") " after " QUOTE_FMT("if") "\n");
-                expression(args, RAX, in, out);
+                expression(args, in, out);
                 fprintf(out, "  cmp $0, %%rax\n  je .L.else.%lu\n", id);
                 whitespace(in);
                 ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after condition\n");
@@ -626,7 +705,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 id = stmt_id++;
 
                 ASSERT_CHAR(args, in, '(', "expect " QUOTE_FMT("(") " after " QUOTE_FMT("while") "\n");
-                expression(args, RAX, in, out);
+                expression(args, in, out);
                 fprintf(out, 
                     ".L.start.%lu:\n"
                     "  cmp $0, %%rax\n"
@@ -643,7 +722,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
             else if(strcmp(buffer, "switch") == 0) { /* switch statement */
                 id = stmt_id++;
 
-                expression(args, RAX, in, out);
+                expression(args, in, out);
                 fprintf(out, "  jmp .L.cmp.%ld\n.L.stmts.%ld:\n", id, id);
 
                 memset(&switch_case_list, 0, sizeof(struct list));
