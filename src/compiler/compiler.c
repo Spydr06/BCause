@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "list.h"
+#include <stddef.h>
 
 #define _XOPEN_SOURCE 700
 #include <stdio.h>
@@ -433,12 +434,8 @@ static void cmp_expr(struct compiler_args *args, FILE *in, FILE *out, enum cmp_o
     );
 }
 
-static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right_is_lvalue)
-{
-    char c;
-    bool is_lvalue = false;
-    
-    switch(c = fgetc(in)) {
+static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
+    switch(c) {
     case '+': /* addition operator */
     case '-': /* subtraction operator */
     case '*': /* multiplication operator */
@@ -504,21 +501,69 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right
         cmp_expr(args, in, out, CMP_EQ);
         break;
 
+    case '&': /* bitwise and operator */
+        fprintf(out, "  push %%rax\n");
+        expression(args, in, out);
+        fprintf(out, "  pop %%rdi\n  and %%rdi, %%rax\n");
+        break;
+    
+    case '|': /* bitwise or operator */
+        fprintf(out, "  push %%rax\n");
+        expression(args, in, out);
+        fprintf(out, "  pop %%rdi\n  or %%rdi, %%rax\n");
+        break;
     default:
         ungetc(c, in);
-        return right_is_lvalue;
+        return false;
+    }
+
+    return true;
+}
+
+static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right_is_lvalue)
+{
+    static long conditional = 0;
+    char c;
+    bool is_lvalue = false;
+    
+    switch(c = fgetc(in)) {
+    case '?': /* conditional operator */
+        fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", conditional);
+        expression(args, in, out);
+        whitespace(in);
+        if((c = fgetc(in)) != ':') {
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(":") " between conditional branches\n", c);
+            exit(1);
+        }
+        fprintf(out, "  jmp .L.cond.end.%ld\n.L.cond.else.%ld:\n", conditional, conditional);
+        expression(args, in, out);
+        fprintf(out, ".L.cond.end.%ld:\n", conditional++);
+        break;
+
+    default:
+        bin_op(args, in, out, c);
     }
     
     return is_lvalue;
 }
 
+static void assignment(struct compiler_args *args, FILE *in, FILE *out)
+{
+    if(!bin_op(args, in, out, fgetc(in))) {
+        whitespace(in);
+        expression(args, in, out);
+    }
+
+    fprintf(out, "  pop %%rdi\n  mov %%rax, (%%rdi)\n");
+}
+
 static bool expression(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
-    size_t i;
-    char c;
+    char c, c1, c2;
     long value;
     bool is_lvalue = false;
+    bool dereference = false;
 
     whitespace(in);
 
@@ -560,19 +605,19 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         }
         lvalue(args, in, buffer);
         fprintf(out, "  add %s, $1\n  movq %s, %%rax\n", buffer, buffer);
+
         is_lvalue = true;
         break;
 
     case '*': /* indirection operator */
         expression(args, in, out);
-        fprintf(out, "  mov (%%rax), %%rax\n");
+        dereference = true;
         is_lvalue = true;
         break;
     
     case '&': /* address operator */
         lvalue(args, in, buffer);
         fprintf(out, "  lea %s, %%rax\n", buffer);
-        is_lvalue = true;
         break;
 
     case EOF:
@@ -591,16 +636,8 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             is_lvalue = true;
 
             ungetc(c, in);
-            identifier(in, buffer, BUFSIZ);
-
-            for(i = 0; i < args->locals.size; i++) {
-                if(strcmp(buffer, args->locals.data[i]) == 0) {
-                    fprintf(out, "  mov -%lu(%%rbp), %%rax\n", i * X86_64_WORD_SIZE);
-                    goto prefix_end;
-                }
-            }
-
-            fprintf(out, "  movq %s(%%rip), %%rax\n", buffer);
+            lvalue(args, in, buffer);
+            fprintf(out, "  movq %s, %%rax\n", buffer);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
@@ -608,8 +645,37 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         }
     }
 
-prefix_end:
     whitespace(in);
+
+    if((c = fgetc(in)) == '=') {
+        if((c1 = fgetc(in)) == '=' && (c2 = fgetc(in)) != '=') { /* check for equality operator `==` */
+            ungetc(c2, in);
+            ungetc(c1, in);
+            goto operator;
+        }
+        ungetc(c2, in);
+        ungetc(c1, in);
+
+        if(!is_lvalue) {
+            eprintf(args->arg0, "left operand of assignment has to be an lvalue");
+            exit(1);
+        }
+
+        if(!dereference)
+            fprintf(out, "lea %s, %%rax\n", buffer); // load the address of the lvalue into %rax
+
+        fprintf(out, "  push %%rax\n");
+        fprintf(out, "  mov (%%rax), %%rax\n");
+
+        assignment(args, in, out);
+        return false;
+    }
+
+operator:
+    if(dereference)
+        fprintf(out, "  mov (%%rax), %%rax\n");
+
+    ungetc(c, in);
     return operator(args, in, out, is_lvalue);
 }
 
@@ -831,16 +897,32 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     statement(args, in, out, fn_ident, switch_id, cases);
                     return;
                 default:
-                    eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
-                    exit(1);
+                    ungetc(c, in);
+                    for(i = strlen(buffer) - 1; i >= 0; i--)
+                        ungetc(buffer[i], in);
+
+                    expression(args, in, out);
+                    whitespace(in);
+                    if((c = fgetc(in)) != ';') {
+                        eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(";") " after expression statement\n", c);
+                        exit(1);
+                    }
                 }
             }
         }
-        else if(c == EOF)
+        else if(c == EOF) {
             eprintf(args->arg0, "unexpected end of file, expect statement\n");
-        else
-            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect statement\n", c);
-        exit(1);
+            exit(1);
+        }
+        else {
+            ungetc(c, in);
+            expression(args, in, out);
+            whitespace(in);
+            if((c = fgetc(in)) != ';') {
+                eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") " expect " QUOTE_FMT(";") " after expression statement\n", c);
+                exit(1);
+            }
+        }
     }
 }
 
