@@ -58,6 +58,12 @@ static const char* registers[R15 + 1] = {
     "%r15"
 };
 
+#define MAX_FN_CALL_ARGS 6
+
+static const char* arg_registers[MAX_FN_CALL_ARGS] = {
+    "%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"
+};
+
 static inline const char* strregister(enum asm_register reg) {
     return registers[reg];
 }
@@ -299,14 +305,14 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
             exit(1);
         }
-        fprintf(out, "  .long %s\n", buffer);
+        fprintf(out, "  .quad %s\n", buffer);
     }
     else if(c == '\'') {
         if((value = character(args, in)) == EOF) {
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
             exit(1);
         }
-        fprintf(out, "  .long %lu\n", value);
+        fprintf(out, "  .quad %lu\n", value);
     }
     else {
         ungetc(c, in);
@@ -314,7 +320,7 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
             exit(1);
         }
-        fprintf(out, "  .long %lu\n", value);
+        fprintf(out, "  .quad %lu\n", value);
     }
 }
 
@@ -391,34 +397,6 @@ static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identi
     }
     else if((args->word_size * num) != 0)
         fprintf(out, "  .zero %ld\n", args->word_size * num);
-}
-
-static void lvalue(struct compiler_args *args, FILE *in, char* out) {
-    char c;
-    size_t i;
-    char buffer[BUFSIZ - 7];
-
-    memset(out, 0, BUFSIZ);
-    switch(c = fgetc(in)) {
-    default:
-        if(isalpha(c)) {
-            ungetc(c, in);
-            identifier(in, buffer, BUFSIZ);
-
-            for(i = 0; i < args->locals.size; i++) {
-                if(strcmp(buffer, args->locals.data[i]) == 0) {
-                    snprintf(out, BUFSIZ - 1, "-%lu(%%rbp)", i * X86_64_WORD_SIZE);
-                    return;
-                }
-            }
-
-            snprintf(out, BUFSIZ - 1, "%s(%%rip)", buffer);
-        }
-        else {
-            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect lvalue\n", c);
-            exit(1);
-        }
-    }
 }
 
 static void cmp_expr(struct compiler_args *args, FILE *in, FILE *out, enum cmp_operator op)
@@ -520,12 +498,15 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
     return true;
 }
 
-static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right_is_lvalue)
+static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_is_lvalue)
 {
     static long conditional = 0;
-    char c;
+    char c, c1, c2;
     bool is_lvalue = false;
+    int num_args = 0;
     
+    whitespace(in);
+
     switch(c = fgetc(in)) {
     case '?': /* conditional operator */
         fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", conditional);
@@ -540,27 +521,84 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool right
         fprintf(out, ".L.cond.end.%ld:\n", conditional++);
         break;
 
+    case '=': /* assignment operator */
+        c1 = fgetc(in);
+        c2 = fgetc(in);
+        ungetc(c2, in);
+        ungetc(c1, in);
+
+        if(c1 == '=' && c2 != '=') /* check for equality operator `==` */
+            goto bin_op;
+
+        if(!left_is_lvalue) {
+            eprintf(args->arg0, "left operand of assignment has to be an lvalue");
+            exit(1);
+        }
+
+        fprintf(out, "  push %%rax\n");
+        fprintf(out, "  mov (%%rax), %%rax\n");
+
+        if(!bin_op(args, in, out, fgetc(in))) {
+            whitespace(in);
+            expression(args, in, out);
+        }
+
+        fprintf(out, "  pop %%rdi\n  mov %%rax, (%%rdi)\n");
+        return false;
+
+    case '[': /* index operator */
+        fprintf(out, "  push %%rax\n");
+        expression(args, in, out);
+        fprintf(out, "  pop %%rdi\n  shl $3, %%rax\n  add %%rdi, %%rax\n");
+    
+        if((c = fgetc(in)) != ']') {
+            eprintf(args->arg0, "unexpected token " QUOTE_FMT("%c") ", expect closing " QUOTE_FMT("]") " after index expression\n", c);
+            exit(1);
+        }
+        is_lvalue = operator(args, in, out, true);
+        break;
+    
+    case '(': /* function call */
+        fprintf(out, "  push %%rax\n");
+
+        while((c = fgetc(in)) != ')') {
+            ungetc(c, in);
+            expression(args, in, out);
+
+            if(++num_args > MAX_FN_CALL_ARGS) {
+                eprintf(args->arg0, "only %d call arguments are currently supported\n", MAX_FN_CALL_ARGS);
+                exit(1);
+            }
+            fprintf(out, "  mov %%rax, %s\n", arg_registers[num_args - 1]);
+
+            if((c = fgetc(in)) == ')')
+                break;
+            else if(c == ',')
+                continue;
+            
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect closing " QUOTE_FMT(")") " after call expression\n", c);
+            exit(1);
+        }
+
+        fprintf(out, "  pop %%r10\n  call *%%r10\n");
+        break;
+
     default:
+    bin_op:
+        if(left_is_lvalue)
+            fprintf(out, "  mov (%%rax), %%rax\n");
+
         bin_op(args, in, out, c);
     }
     
     return is_lvalue;
 }
 
-static void assignment(struct compiler_args *args, FILE *in, FILE *out)
-{
-    if(!bin_op(args, in, out, fgetc(in))) {
-        whitespace(in);
-        expression(args, in, out);
-    }
-
-    fprintf(out, "  pop %%rdi\n  mov %%rax, (%%rdi)\n");
-}
-
 static bool expression(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
-    char c, c1, c2;
+    char c;
+    size_t i;
     long value;
     bool is_lvalue = false;
     bool dereference = false;
@@ -587,8 +625,11 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
     
     case '-':
         if((c = fgetc(in)) == '-') { /* prefix decrement operator */
-            lvalue(args, in, buffer);
-            fprintf(out, "  sub %s, $1\n  movq %s, %%rax", buffer, buffer);
+            if(!expression(args, in, out)) {
+                eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("--") "\n");
+                exit(1);
+            }
+            fprintf(out, "  mov (%%rax), %%rdi\n  sub $1, %%rdi\n  mov %%rdi, (%%rax)");
             is_lvalue = true;
         }
         else { /* negation operator */
@@ -603,8 +644,11 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT("+") "\n", c);
             exit(1);
         }
-        lvalue(args, in, buffer);
-        fprintf(out, "  add %s, $1\n  movq %s, %%rax\n", buffer, buffer);
+        if(!expression(args, in, out)) {
+            eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("++") "\n");
+            exit(1);
+        }
+        fprintf(out, "  mov (%%rax), %%rdi\n  add $1, %%rdi\n  mov %%rdi, (%%rax)");
 
         is_lvalue = true;
         break;
@@ -616,8 +660,10 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         break;
     
     case '&': /* address operator */
-        lvalue(args, in, buffer);
-        fprintf(out, "  lea %s, %%rax\n", buffer);
+        if(!expression(args, in, out)) {
+            eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("&") "\n");
+            exit(1);
+        }
         break;
 
     case EOF:
@@ -636,8 +682,16 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             is_lvalue = true;
 
             ungetc(c, in);
-            lvalue(args, in, buffer);
-            fprintf(out, "  movq %s, %%rax\n", buffer);
+            identifier(in, buffer, BUFSIZ);
+
+            for(i = 0; i < args->locals.size; i++) {
+                if(strcmp(buffer, args->locals.data[i]) == 0) {
+                    fprintf(out, "lea -%lu(%%rbp), %%rax\n", i * X86_64_WORD_SIZE);
+                    goto operator;
+                }
+            }
+
+            fprintf(out, "lea %s(%%rip), %%rax\n", buffer);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
@@ -645,37 +699,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         }
     }
 
-    whitespace(in);
-
-    if((c = fgetc(in)) == '=') {
-        if((c1 = fgetc(in)) == '=' && (c2 = fgetc(in)) != '=') { /* check for equality operator `==` */
-            ungetc(c2, in);
-            ungetc(c1, in);
-            goto operator;
-        }
-        ungetc(c2, in);
-        ungetc(c1, in);
-
-        if(!is_lvalue) {
-            eprintf(args->arg0, "left operand of assignment has to be an lvalue");
-            exit(1);
-        }
-
-        if(!dereference)
-            fprintf(out, "lea %s, %%rax\n", buffer); // load the address of the lvalue into %rax
-
-        fprintf(out, "  push %%rax\n");
-        fprintf(out, "  mov (%%rax), %%rax\n");
-
-        assignment(args, in, out);
-        return false;
-    }
-
 operator:
-    if(dereference)
-        fprintf(out, "  mov (%%rax), %%rax\n");
-
-    ungetc(c, in);
     return operator(args, in, out, is_lvalue);
 }
 
