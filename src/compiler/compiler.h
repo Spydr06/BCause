@@ -28,6 +28,7 @@ struct compiler_args {
     bool do_assembling; /* should the compiler assemble? */
 
     struct list locals; /* local variables */
+    struct list extrns; /* extrn variables */
 };
 
 #ifdef __GNUC__
