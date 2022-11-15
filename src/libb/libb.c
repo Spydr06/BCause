@@ -4,7 +4,7 @@
 
 #ifndef B_TYPE
     /* type representing B's single data type (64-bit int on x86_64) */
-    #define B_TYPE long
+    #define B_TYPE long long
 #endif
 #ifndef B_FN
     #define B_FN(name) name
@@ -308,7 +308,7 @@ void B_FN(printn)(B_TYPE n, B_TYPE b) {
 
 /* The character char is written on the standard output file. */
 void B_FN(putchar)(B_TYPE chr) {
-    syscall(SYS_write, &chr, 1);
+    syscall(SYS_write, 1, &chr, sizeof(B_TYPE));
 }
 
 /* Count bytes are read into the vector buffer from the open
