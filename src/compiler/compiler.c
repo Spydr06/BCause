@@ -325,7 +325,7 @@ static void string(struct compiler_args *args, FILE *in) {
     char c;
     size_t alloc = 32;
     size_t size = 0;
-    char *string = malloc(alloc * sizeof(char));
+    char *string = calloc(alloc, sizeof(char));
     
     while((c = fgetc(in)) != '"') {
         if(c == '*') {
@@ -1151,11 +1151,10 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *fn_i
     list_clear(&args->locals);
 
     for(i = 0; i < args->extrns.size; i++)
-        if(args->extrns.data[i] != fn_id)
-            free(args->extrns.data[i]);
+        free(args->extrns.data[i]);
     list_clear(&args->extrns);
 
-    list_push(&args->extrns, fn_id);
+    list_push(&args->extrns, strdup(fn_id));
 
     fprintf(out, 
         ".text\n"
@@ -1198,13 +1197,18 @@ static void strings(struct compiler_args *args, FILE *out)
         for(j = 0; j < size; j++)
             fprintf(out, "  .byte %u\n", string[j]);
         fprintf(out, "  .byte 0\n");
+
+        free(string);
     }
+
+    list_free(&args->strings);
 }
 
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
     char c;
+    size_t i;
     
     while(identifier(args, in, buffer)) {
         fprintf(out, ".globl %s\n", buffer);
@@ -1234,4 +1238,13 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
     }
 
     strings(args, out);
+
+    for(i = 0; i < args->locals.size; i++)
+        free(args->locals.data[i]);
+    list_free(&args->locals);
+
+
+    for(i = 0; i < args->extrns.size; i++)
+        free(args->extrns.data[i]);
+    list_free(&args->extrns);
 }
