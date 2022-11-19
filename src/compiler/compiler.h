@@ -14,7 +14,7 @@
 
 #define QUOTE_FMT(str) COLOR_BOLD_WHITE "‘" str "’" COLOR_RESET
 
-#define X86_64_WORD_SIZE sizeof(long)
+#define X86_64_WORD_SIZE sizeof(intptr_t)
 
 struct compiler_args {
     char *arg0; /* name of the executable */

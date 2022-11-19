@@ -1,11 +1,12 @@
 #include "compiler.h"
 #include "list.h"
-#include <stddef.h>
 
 #define _XOPEN_SOURCE 700
 #include <stdio.h>
 #undef _XOPEN_SOURCE
 
+#include <stdint.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
@@ -21,53 +22,16 @@
         exit(1);                                    \
     }} while(0)
 
-enum asm_register {
-    RAX,
-    RBX,
-    RCX,
-    RDX,
-    RDI,
-    RSI,
-    RBP,
-    RSP,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15
-};
-
-static const char* registers[R15 + 1] = {
-    "%rax",
-    "%rbx",
-    "%rcx",
-    "%rdx",
-    "%rdi",
-    "%rsi",
-    "%rbp",
-    "%rsp",
-    "%r8",
-    "%r9",
-    "%r10",
-    "%r11",
-    "%r12",
-    "%r13",
-    "%r14",
-    "%r15"
-};
-
 #define MAX_FN_CALL_ARGS 6
 
 static const char* arg_registers[MAX_FN_CALL_ARGS] = {
-    "%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"
+    "%rdi",
+    "%rsi",
+    "%rdx",
+    "%rcx",
+    "%r8",
+    "%r9"
 };
-
-static inline const char* strregister(enum asm_register reg) {
-    return registers[reg];
-}
 
 enum cmp_operator {
     CMP_LT = 0, /* less-than operator */
@@ -253,10 +217,10 @@ static int identifier(struct compiler_args *args, FILE *in, char* buffer)
     return read;
 }
 
-static long number(struct compiler_args *args, FILE *in) {
+static intptr_t number(struct compiler_args *args, FILE *in) {
     int read = 0;
     char c;
-    long num = 0;
+    intptr_t num = 0;
 
     whitespace(args, in);
     while((c = fgetc(in)) != EOF) {
@@ -274,10 +238,10 @@ static long number(struct compiler_args *args, FILE *in) {
     return num;
 }
 
-static long long character(struct compiler_args *args, FILE *in) {
+static intptr_t character(struct compiler_args *args, FILE *in) {
     char c = 0;
     int i;
-    long long value = 0;
+    intptr_t value = 0;
 
     for(i = 0; i < args->word_size; i++) {
         if(c != '*' && (c = fgetc(in)) == '\'')
@@ -306,7 +270,7 @@ static long long character(struct compiler_args *args, FILE *in) {
                 exit(1);
             }
         }
-        value |= ((long long) c) << (i * X86_64_WORD_SIZE);
+        value |= ((intptr_t) c) << (i * X86_64_WORD_SIZE);
     }
 
     if(fgetc(in) != '\'') {
@@ -363,7 +327,7 @@ static void string(struct compiler_args *args, FILE *in) {
 static void ival(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
-    long long value;
+    intptr_t value;
     char c = fgetc(in);
 
     if(isalpha(c)) {
@@ -379,7 +343,7 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
             exit(1);
         }
-        fprintf(out, "  .quad %llu\n", value);
+        fprintf(out, "  .quad %lu\n", value);
     }
     else if(c == '\"') {
         string(args, in);
@@ -391,7 +355,7 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected end of file, expect ival\n");
             exit(1);
         }
-        fprintf(out, "  .quad %llu\n", value);
+        fprintf(out, "  .quad %lu\n", value);
     }
 }
 
@@ -425,7 +389,7 @@ static void global(struct compiler_args *args, FILE *in, FILE *out, char *identi
 
 static void vector(struct compiler_args *args, FILE *in, FILE *out, char *identifier)
 {
-    long num = 0;
+    intptr_t num = 0;
     char c;
 
     whitespace(args, in);
@@ -571,7 +535,7 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
 
 static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_is_lvalue)
 {
-    static long conditional = 0;
+    static intptr_t conditional = 0;
     char c, c1, c2;
     bool is_lvalue = false;
     int num_args = 0;
@@ -712,7 +676,7 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
     return is_lvalue;
 }
 
-static long find_identifier(struct compiler_args *args, const char *buffer, bool *is_extrn)
+static intptr_t find_identifier(struct compiler_args *args, const char *buffer, bool *is_extrn)
 {
     size_t i;
 
@@ -739,7 +703,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
     char c;
-    long long value;
+    intptr_t value;
     bool is_lvalue = false, is_extrn = false;
 
     whitespace(args, in);
@@ -747,7 +711,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
     switch(c = fgetc(in)) {
     case '\'': /* character literal */
         if((value = character(args, in)))
-            fprintf(out, "  mov $%llu, %%rax\n", value);
+            fprintf(out, "  mov $%lu, %%rax\n", value);
         else
             fprintf(out, "  xor %%rax, %%rax\n");
         break;
@@ -814,7 +778,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         if(isdigit(c)) { /* integer literal */
             ungetc(c, in);
             if((value = number(args, in)))
-                fprintf(out, "  mov $%llu, %%rax\n", value);
+                fprintf(out, "  mov $%lu, %%rax\n", value);
             else
                 fprintf(out, "  xor %%rax, %%rax\n");
         }
@@ -824,7 +788,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             ungetc(c, in);
             identifier(args, in, buffer);
 
-            if((value = find_identifier(args, buffer, &is_extrn) < 0)) {
+            if((value = find_identifier(args, buffer, &is_extrn)) < 0) {
                 eprintf(args->arg0, "undefined identifier " QUOTE_FMT("%s") "\n", buffer);
                 exit(1);
             }
@@ -832,7 +796,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             if(is_extrn)
                 fprintf(out, "  lea %s(%%rip), %%rax\n", buffer);
             else
-                fprintf(out, "  lea -%llu(%%rbp), %%rax\n", value * X86_64_WORD_SIZE);
+                fprintf(out, "  lea -%lu(%%rbp), %%rax\n", (value + 1) * X86_64_WORD_SIZE);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
@@ -843,14 +807,14 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
     return operator(args, in, out, is_lvalue);
 }
 
-static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, long switch_id, struct list *cases)
+static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, intptr_t switch_id, struct list *cases)
 {
     char c;
     static char buffer[BUFSIZ];
-    static long stmt_id = 0; /* unique id for each statement for generating labels */
-    long id;
-    long long value = 0;
-    long i;
+    static intptr_t stmt_id = 0; /* unique id for each statement for generating labels */
+    intptr_t id;
+    intptr_t value = 0;
+    intptr_t i;
     struct list switch_case_list;
     char *name;
 
@@ -936,12 +900,12 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 id = stmt_id++;
 
                 ASSERT_CHAR(args, in, '(', "expect " QUOTE_FMT("(") " after " QUOTE_FMT("while") "\n");
+                fprintf(out, ".L.start.%lu:\n", id);
                 expression(args, in, out);
                 fprintf(out, 
-                    ".L.start.%lu:\n"
                     "  cmp $0, %%rax\n"
                     "  je .L.end.%lu\n",
-                    id, id
+                    id
                 );
                 whitespace(args, in);
                 ASSERT_CHAR(args, in, ')', "expect " QUOTE_FMT(")") " after condition\n");
@@ -964,8 +928,8 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     id, id
                 );
 
-                for(i = 0; i < (long) switch_case_list.size; i++)
-                    fprintf(out, "  cmp $%llu, %%rax\n  je .L.case.%lu.%llu\n", (unsigned long long) switch_case_list.data[i], id, (unsigned long long) switch_case_list.data[i]);
+                for(i = 0; i < (intptr_t) switch_case_list.size; i++)
+                    fprintf(out, "  cmp $%lu, %%rax\n  je .L.case.%lu.%lu\n", (uintptr_t) switch_case_list.data[i], id, (uintptr_t) switch_case_list.data[i]);
 
                 fprintf(out, ".L.end.%ld:\n", id);
 
@@ -995,7 +959,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     exit(1);
                 }
                 
-                if((long) value == EOF) {
+                if((intptr_t) value == EOF) {
                     eprintf(args->arg0, "unexpected end of file, expect constant after " QUOTE_FMT("case") "\n");
                     exit(1);
                 }
@@ -1003,7 +967,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                 ASSERT_CHAR(args, in, ':', "expect " QUOTE_FMT(":") " after " QUOTE_FMT("case") "\n");
                 list_push(cases, (void*) value);
 
-                fprintf(out, ".L.case.%ld.%llu:\n", switch_id, value);
+                fprintf(out, ".L.case.%ld.%lu:\n", switch_id, value);
                 statement(args, in, out, fn_ident, switch_id, cases);
                 return;
             }
@@ -1061,7 +1025,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     strcpy(name, buffer);
                     list_push(&args->locals, name);
 
-                    fprintf(out, "  sub $%lu, %%rsp\n  movq $%llu, -%lu(%%rbp)\n", X86_64_WORD_SIZE, value, (args->locals.size - 1) * X86_64_WORD_SIZE);
+                    fprintf(out, "  sub $%lu, %%rsp\n  movq $%lu, -%lu(%%rbp)\n", X86_64_WORD_SIZE, value, (args->locals.size) * X86_64_WORD_SIZE);
                 } while((c) == ',');
 
                 if(c != ';') {
@@ -1118,7 +1082,7 @@ static void arguments(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "expect " QUOTE_FMT(")") " or identifier after function arguments\n");
             exit(1);
         }
-        fprintf(out, "  sub $%lu, %%rsp\n  mov %s, -%lu(%%rbp)\n", X86_64_WORD_SIZE, arg_registers[i++], (args->locals.size - 1) * X86_64_WORD_SIZE);   
+        fprintf(out, "  sub $%lu, %%rsp\n  mov %s, -%lu(%%rbp)\n", X86_64_WORD_SIZE, arg_registers[i++], (args->locals.size) * X86_64_WORD_SIZE);   
 
         name = calloc(strlen(buffer) + 1, sizeof(char));
         strcpy(name, buffer);
