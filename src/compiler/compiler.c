@@ -127,10 +127,6 @@ int compile(struct compiler_args *args)
         }
     }
 
-    for(i = 0; i < args->locals.size; i++)
-        free(args->locals.data[i]);
-    list_free(&args->locals);
-
     // write the buffer to an assembly file
     fclose(buffer);
     if(!(out = fopen(asm_file, "w"))) {
