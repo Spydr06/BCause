@@ -17,7 +17,7 @@
 #define X86_64_WORD_SIZE sizeof(intptr_t)
 
 struct compiler_args {
-    char *arg0; /* name of the executable */
+    const char *arg0; /* name of the executable */
     char *output_file; /* output file */
     char **input_files; /* input files */
     int num_input_files; /* number of input files */
@@ -26,6 +26,7 @@ struct compiler_args {
 
     bool do_linking;    /* should the compiler link? */
     bool do_assembling; /* should the compiler assemble? */
+    bool save_temps;    /* should temporary files get deleted? */
 
     struct list locals; /* local variables */
     struct list extrns; /* extrn variables */
@@ -36,7 +37,7 @@ struct compiler_args {
 #ifdef __GNUC__
 __attribute((format(printf, 2, 3)))
 #endif
-void eprintf(char *arg0, char *fmt, ...);
+void eprintf(const char *arg0, const char *fmt, ...);
 
 int compile(struct compiler_args *args);
 

@@ -53,12 +53,12 @@ const char* cmp_instruction[CMP_NE + 1] = {
 
 static bool expression(struct compiler_args *args, FILE *in, FILE *out);
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
-static int subprocess(char *arg0, const char *p_name, char *const *p_arg);
+static int subprocess(const char *arg0, const char *p_name, char *const *p_arg);
 
 #ifdef __GNUC__
 __attribute((format(printf, 2, 3)))
 #endif
-void eprintf(char *arg0, char *fmt, ...)
+void eprintf(const char *arg0, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -71,8 +71,8 @@ int compile(struct compiler_args *args)
 {
     // create a buffer for the assembly code
     char* buf;
-    char* asm_file = A_S;
-    char* obj_file = A_O;
+    char* asm_file = args->do_assembling ? A_S : args->output_file;
+    char* obj_file = args->do_linking ? A_O : args->output_file;
     size_t buf_len, len, i;
     FILE *buffer = open_memstream(&buf, &buf_len);
     FILE *out, *in; 
@@ -112,7 +112,8 @@ int compile(struct compiler_args *args)
             return 1;
         }
 
-        remove(asm_file);
+        if(!args->save_temps)
+            remove(asm_file);
     }
     
     if(args->do_linking) {
@@ -129,13 +130,14 @@ int compile(struct compiler_args *args)
             return 1;
         }
 
-        remove(obj_file);
+        if(!args->save_temps)
+            remove(obj_file);
     }
 
     return 0;
 }
 
-static int subprocess(char *arg0, const char *p_name, char *const *p_arg)
+static int subprocess(const char *arg0, const char *p_name, char *const *p_arg)
 {
     pid_t pid = fork();
 
@@ -461,9 +463,9 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
     case '%': /* modulo operator */
         fprintf(out, "  push %%rax\n");
         expression(args, in, out);
-        fprintf(out, "  pop %%rdi\n  cqo\n  idiv %%rdi\n");
+        fprintf(out, "mov %%rax, %%rdi\n  pop %%rax\n  cqo\n  idiv %%rdi\n");
         if(c == '%')
-            fprintf(out, "  mov %%rdx, %%rdi\n");
+            fprintf(out, "  mov %%rdx, %%rax\n");
         break;
     
     case '<':
@@ -649,7 +651,7 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
                 eprintf(args->arg0, "only %d call arguments are currently supported\n", MAX_FN_CALL_ARGS);
                 exit(1);
             }
-            fprintf(out, "  mov %%rax, %s\n", arg_registers[num_args - 1]);
+            fprintf(out, "  push %%rax\n");
 
             whitespace(args, in);
             if((c = fgetc(in)) == ')')
@@ -661,7 +663,11 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
             exit(1);
         }
 
+        while(num_args > 0)
+            fprintf(out, "  pop %s\n", arg_registers[--num_args]);
+
         fprintf(out, "  pop %%r10\n  call *%%r10\n");
+        is_lvalue = operator(args, in, out, false);
         break;
 
     default:
@@ -699,8 +705,7 @@ static intptr_t find_identifier(struct compiler_args *args, const char *buffer, 
     return -1;
 }
 
-static bool expression(struct compiler_args *args, FILE *in, FILE *out)
-{
+static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) {
     static char buffer[BUFSIZ];
     char c;
     intptr_t value;
@@ -727,13 +732,13 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         break;
 
     case '!': /* not operator */
-        expression(args, in, out);
+        primary_expression(args, in, out);
         fprintf(out, "  cmp $0, %%rax\n  sete %%al\n  movzx %%al, %%rax\n");
         break;
     
     case '-':
         if((c = fgetc(in)) == '-') { /* prefix decrement operator */
-            if(!expression(args, in, out)) {
+            if(!primary_expression(args, in, out)) {
                 eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("--") "\n");
                 exit(1);
             }
@@ -741,7 +746,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         }
         else { /* negation operator */
             ungetc(c, in);
-            expression(args, in, out);
+            primary_expression(args, in, out);
             fprintf(out, "  neg %%rax\n");
         }
         break;
@@ -751,7 +756,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT("+") "\n", c);
             exit(1);
         }
-        if(!expression(args, in, out)) {
+        if(!primary_expression(args, in, out)) {
             eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("++") "\n");
             exit(1);
         }
@@ -759,12 +764,12 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         break;
 
     case '*': /* indirection operator */
-        expression(args, in, out);
+        primary_expression(args, in, out);
         is_lvalue = true;
         break;
     
     case '&': /* address operator */
-        if(!expression(args, in, out)) {
+        if(!primary_expression(args, in, out)) {
             eprintf(args->arg0, "expected lvalue after " QUOTE_FMT("&") "\n");
             exit(1);
         }
@@ -804,7 +809,12 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
         }
     }
 
-    return operator(args, in, out, is_lvalue);
+    return is_lvalue;
+}
+
+static bool expression(struct compiler_args *args, FILE *in, FILE *out)
+{
+    return operator(args, in, out, primary_expression(args, in, out));
 }
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, intptr_t switch_id, struct list *cases)
@@ -1082,7 +1092,7 @@ static void arguments(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "expect " QUOTE_FMT(")") " or identifier after function arguments\n");
             exit(1);
         }
-        fprintf(out, "  sub $%lu, %%rsp\n  mov %s, -%lu(%%rbp)\n", X86_64_WORD_SIZE, arg_registers[i++], (args->locals.size) * X86_64_WORD_SIZE);   
+        fprintf(out, "  sub $%lu, %%rsp\n  mov %s, -%lu(%%rbp)\n", X86_64_WORD_SIZE, arg_registers[i++], (args->locals.size + 1) * X86_64_WORD_SIZE);   
 
         name = calloc(strlen(buffer) + 1, sizeof(char));
         strcpy(name, buffer);
