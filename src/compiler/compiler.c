@@ -321,6 +321,49 @@ static long long character(struct compiler_args *args, FILE *in) {
     return value;
 }
 
+static void string(struct compiler_args *args, FILE *in) {
+    char c;
+    size_t alloc = 32;
+    size_t size = 0;
+    char *string = malloc(alloc * sizeof(char));
+    
+    while((c = fgetc(in)) != '"') {
+        if(c == '*') {
+            switch(c = fgetc(in)) {
+            case '0':
+            case 'e':
+                c = '\0';
+                break;
+            case '(':
+            case ')':
+            case '*':
+            case '\'':
+            case '"':
+                break;
+            case 't':
+                c = '\t';
+                break;
+            case 'n':
+                c = '\n';
+                break;
+            default:
+                eprintf(args->arg0, "undefined escape character " QUOTE_FMT("*%c"), c);
+                exit(1);
+            }
+        }
+        else if(c == EOF) {
+            eprintf(args->arg0, "unterminated string literal");
+            exit(1);
+        }
+        string[size] = c;
+        size++;
+        if(size >= alloc)
+            string = realloc(string, (alloc *= 2) * sizeof(char));
+    }
+
+    list_push(&args->strings, string);
+}
+
 static void ival(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
@@ -341,6 +384,10 @@ static void ival(struct compiler_args *args, FILE *in, FILE *out)
             exit(1);
         }
         fprintf(out, "  .quad %llu\n", value);
+    }
+    else if(c == '\"') {
+        string(args, in);
+        fprintf(out, "  .quad .string.%lu\n", args->strings.size - 1);
     }
     else {
         ungetc(c, in);
@@ -707,6 +754,11 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
             fprintf(out, "  mov $%llu, %%rax\n", value);
         else
             fprintf(out, "  xor %%rax, %%rax\n");
+        break;
+    
+    case '\"': /* string literal */
+        string(args, in);
+        fprintf(out, "  lea .string.%lu(%%rip), %%rax\n", args->strings.size - 1);
         break;
     
     case '(': /* parentheses */
@@ -1131,6 +1183,24 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *fn_i
     );
 }
 
+static void strings(struct compiler_args *args, FILE *out)
+{
+    char *string;
+    size_t i, j, size;
+
+    fprintf(out, ".section .rodata\n");
+
+    for(i = 0; i < args->strings.size; i++) {
+        fprintf(out, ".string.%lu:\n", i);
+
+        string = args->strings.data[i];
+        size = strlen(string);
+        for(j = 0; j < size; j++)
+            fprintf(out, "  .byte %u\n", string[j]);
+        fprintf(out, "  .byte 0\n");
+    }
+}
+
 static void declarations(struct compiler_args *args, FILE *in, FILE *out)
 {
     static char buffer[BUFSIZ];
@@ -1162,4 +1232,6 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
         eprintf(args->arg0, "expect identifier at top level\n");
         exit(1);
     }
+
+    strings(args, out);
 }

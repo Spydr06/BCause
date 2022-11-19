@@ -29,6 +29,8 @@ struct compiler_args {
 
     struct list locals; /* local variables */
     struct list extrns; /* extrn variables */
+
+    struct list strings; /* string table */
 };
 
 #ifdef __GNUC__

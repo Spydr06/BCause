@@ -1,9 +1,7 @@
 /* The following program will print 'Hello World' to stdout. */
 
 main() {
-    extrn putchar;
+    extrn printf;
 
-    putchar('hell');
-    putchar('o wo');
-    putchar('rld*n');
+    printf("Hello, World!*n");
 }
