@@ -4,14 +4,18 @@
 
 This repository also includes a `libb.a` implementation, B's standard library. It requires zero dependencies, not even libc.
 
+BCause is implemented as a small single-pass compiler in ~1800 lines of pure C99 code. Therefore, it features small compile times with a very low memory footprint.
+
 ### Current Status
 
 - [x] global variables
-- [ ] functions
-- [ ] `auto` & `extrn` variables
-- [ ] control flow statements
-- [ ] expressions
+- [x] functions
+- [x] `auto` & `extrn` variables
+- [x] control flow statements
+- [x] expressions
 - [x] `libb.a` standard library
+- [ ] optimization
+- [ ] nicer error messages
 
 ### Installation
 
@@ -24,10 +28,12 @@ Then, build the project:
 ```console
 $ make
 ```
-To install BCause on your computer globally, use: *(needs root privileges)*
+To install BCause on your computer globally, use:
 ```console
 # make install
 ```
+> **Warning**
+> this requires root privileges and modifies system files
 
 ### Usage
 
