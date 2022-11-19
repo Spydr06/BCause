@@ -1151,10 +1151,11 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *fn_i
     list_clear(&args->locals);
 
     for(i = 0; i < args->extrns.size; i++)
-        free(args->extrns.data[i]);
+        if(args->extrns.data[i] != fn_id)
+            free(args->extrns.data[i]);
     list_clear(&args->extrns);
 
-    list_push(&args->extrns, strdup(fn_id));
+    list_push(&args->extrns, fn_id);
 
     fprintf(out, 
         ".text\n"
@@ -1245,6 +1246,7 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
 
 
     for(i = 0; i < args->extrns.size; i++)
-        free(args->extrns.data[i]);
+        if(args->extrns.data[i] != buffer)
+            free(args->extrns.data[i]);
     list_free(&args->extrns);
 }
