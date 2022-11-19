@@ -463,7 +463,7 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
     case '%': /* modulo operator */
         fprintf(out, "  push %%rax\n");
         expression(args, in, out);
-        fprintf(out, "mov %%rax, %%rdi\n  pop %%rax\n  cqo\n  idiv %%rdi\n");
+        fprintf(out, "  mov %%rax, %%rdi\n  pop %%rax\n  cqo\n  idiv %%rdi\n");
         if(c == '%')
             fprintf(out, "  mov %%rdx, %%rax\n");
         break;
@@ -537,7 +537,8 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
 
 static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_is_lvalue)
 {
-    static intptr_t conditional = 0;
+    static size_t conditional = 0;
+    size_t this_conditional;
     char c, c1, c2;
     bool is_lvalue = false;
     int num_args = 0;
@@ -546,16 +547,17 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
 
     switch(c = fgetc(in)) {
     case '?': /* conditional operator */
-        fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", conditional);
+        this_conditional = conditional++;
+        fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", this_conditional);
         expression(args, in, out);
         whitespace(args, in);
         if((c = fgetc(in)) != ':') {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(":") " between conditional branches\n", c);
             exit(1);
         }
-        fprintf(out, "  jmp .L.cond.end.%ld\n.L.cond.else.%ld:\n", conditional, conditional);
+        fprintf(out, "  jmp .L.cond.end.%ld\n.L.cond.else.%ld:\n", this_conditional, this_conditional);
         expression(args, in, out);
-        fprintf(out, ".L.cond.end.%ld:\n", conditional++);
+        fprintf(out, ".L.cond.end.%ld:\n", this_conditional);
         break;
 
     case '+': /* postfix increment operator */
@@ -812,21 +814,18 @@ static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) 
     return is_lvalue;
 }
 
-static bool expression(struct compiler_args *args, FILE *in, FILE *out)
+static inline bool expression(struct compiler_args *args, FILE *in, FILE *out)
 {
     return operator(args, in, out, primary_expression(args, in, out));
 }
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, intptr_t switch_id, struct list *cases)
 {
-    char c;
+    char c, *name;
     static char buffer[BUFSIZ];
-    static intptr_t stmt_id = 0; /* unique id for each statement for generating labels */
-    intptr_t id;
-    intptr_t value = 0;
-    intptr_t i;
+    static size_t id, stmt_id = 0; /* unique id for each statement for generating labels */
+    intptr_t i, value = 0;
     struct list switch_case_list;
-    char *name;
 
     whitespace(args, in);
     switch (c = fgetc(in)) {

@@ -301,6 +301,12 @@ end:
    code values. */
 void B_FN(printn)(B_TYPE n, B_TYPE b) {
     B_TYPE a;
+    
+    if(n < 0) {
+        B_FN(putchar)('-');
+        n = -n;
+    }
+
     if((a = n / b))
         B_FN(printn)(a, b);
     B_FN(putchar)(n % b + '0');
