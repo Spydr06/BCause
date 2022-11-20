@@ -10,6 +10,8 @@
     #define B_FN(name) name
 #endif
 
+#define NULL ((void*) 0)
+
 #define stdin  0
 #define stdout 1
 #define stderr 2
@@ -95,6 +97,7 @@ static inline SYSCALL_TYPE __syscall3(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_T
 #define SYS_unlink 87
 #define SYS_chmod 90
 #define SYS_chown 92
+#define SYS_gettimeofday 96
 #define SYS_getuid 102
 #define SYS_setuid 105
 #define SYS_time 201
@@ -151,13 +154,58 @@ B_TYPE B_FN(creat)(B_TYPE string, B_TYPE mode) {
 
 /* The system time (60-ths of a second) represented in the
    two-word vector time is converted to a 16-character date in
-   the 8-word v~ctor date. The,,converted date has the follow-
+   the 8-word vector date. The converted date has the follow-
    ing format: "Mmm dd hh:mm:ss" */
-void B_FN(ctime)(B_TYPE time, B_TYPE date) {
-    (void) time;
-    (void) date;
-    // TODO
+static char month_strs[12][3] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+
+void B_FN(ctime)(B_TYPE time_vec, B_TYPE date) {
+    short hour, minute, second;
+    long a, b, c, d, month, day;
+    B_TYPE time = *(B_TYPE*) time_vec;
+    char *date_vec = (void*) date;
+
+    second = time % 60;
+    time /= 60;
+    minute = time % 60;
+    time /= 60;
+    hour = time % 24;
+    time /= 24;
+
+    a = (4 * time + 102032) / 146097 + 15;
+    b = time + 2442113 + a - a / 4;
+    c = (20 * b - 2442) / 7305;
+    d = b - 365 * c - c / 4;
+    month = d * 1000 / 30601;
+    day = d - month * 30 - month * 601 / 1000;
+
+    if(month <= 13) {
+        c -= 4716;
+        month -= 2;
+    }
+    else {
+        c -= 4715;
+        month -= 14;
+    }
+
+    date_vec[0] = month_strs[month][0];
+    date_vec[1] = month_strs[month][1];
+    date_vec[3] = month_strs[month][2];
+    date_vec[4] = ' ';
+    date_vec[5] = day / 10 + '0';
+    date_vec[6] = day % 10 + '0';
+    date_vec[7] = ' ';
+    date_vec[8] = hour / 10 + '0';
+    date_vec[9] = hour % 10 + '0';
+    date_vec[10] = ':';
+    date_vec[11] = minute / 10 + '0';
+    date_vec[12] = minute % 10 + '0';
+    date_vec[13] = ':';
+    date_vec[14] = second / 10 + '0';
+    date_vec[15] = second % 10 + '0';
 }
+
 /* The current process is replaced by the execution of the
    file specified by string. The arg-i strings are passed as
    arguments. A return indicates an error. */
@@ -358,9 +406,9 @@ B_TYPE B_FN(stty)(B_TYPE file, B_TYPE ttystat) {
     return -1;
 }
 
-/* The current system time is returned in the 2-word vector timev. */
+/* The current system time is returned in the 1-word vector timev. */
 void B_FN(time)(B_TYPE timev) {
-    *((long*) timev) = syscall(SYS_time, 0);
+    *((B_TYPE*) timev) = syscall(SYS_time, 0);
 }
 
 /* The link specified by the string is removed. A negative

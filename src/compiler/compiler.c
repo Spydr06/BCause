@@ -790,7 +790,7 @@ static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) 
             if(is_extrn)
                 fprintf(out, "  lea %s(%%rip), %%rax\n", buffer);
             else
-                fprintf(out, "  lea -%lu(%%rbp), %%rax\n", (value + 1) * X86_64_WORD_SIZE);
+                fprintf(out, "  lea -%lu(%%rbp), %%rax\n", (value + 2) * args->word_size);
         }
         else {
             eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect expression\n", c);
@@ -836,7 +836,7 @@ static bool expression(struct compiler_args *args, FILE *in, FILE *out)
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, intptr_t switch_id, struct list *cases)
 {
-    char c, *name;
+    char c;
     static char buffer[BUFSIZ];
     size_t id;
     static size_t stmt_id = 0; /* unique id for each statement for generating labels */
@@ -1008,9 +1008,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                         exit(1);
                     }
 
-                    name = calloc(strlen(buffer) + 1, sizeof(char));
-                    strcpy(name, buffer);
-                    list_push(&args->extrns, name);
+                    list_push(&args->extrns, strdup(buffer));
 
                     whitespace(args, in);
                 } while((c = fgetc(in)) == ',');
@@ -1046,11 +1044,9 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                         exit(1);
                     }
 
-                    name = calloc(strlen(buffer) + 1, sizeof(char));
-                    strcpy(name, buffer);
-                    list_push(&args->locals, name);
+                    list_push(&args->locals, strdup(buffer));
 
-                    fprintf(out, "  sub $%lu, %%rsp\n  movq $%lu, -%lu(%%rbp)\n", X86_64_WORD_SIZE, value, (args->locals.size) * X86_64_WORD_SIZE);
+                    fprintf(out, "  sub $%u, %%rsp\n  movq $%lu, -%lu(%%rbp)\n", args->word_size, value, (args->locals.size + 1) * args->word_size);
                 } while((c) == ',');
 
                 if(c != ';') {
@@ -1107,7 +1103,7 @@ static void arguments(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "expect " QUOTE_FMT(")") " or identifier after function arguments\n");
             exit(1);
         }
-        fprintf(out, "  sub $%lu, %%rsp\n  mov %s, -%lu(%%rbp)\n", X86_64_WORD_SIZE, arg_registers[i++], (args->locals.size + 1) * X86_64_WORD_SIZE);   
+        fprintf(out, "  sub $%u, %%rsp\n  mov %s, -%lu(%%rbp)\n", args->word_size, arg_registers[i++], (args->locals.size + 2) * args->word_size);   
 
         name = calloc(strlen(buffer) + 1, sizeof(char));
         strcpy(name, buffer);
@@ -1147,8 +1143,9 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *fn_i
         ".type %s, @function\n"
         "%s:\n"
         "  push %%rbp\n"
-        "  mov %%rsp, %%rbp\n", 
-        fn_id, fn_id
+        "  mov %%rsp, %%rbp\n"
+        "  sub $%d, %%rsp\n",
+        fn_id, fn_id, args->word_size
     );
 
     if((c = fgetc(in)) != ')') {
@@ -1228,8 +1225,7 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
     for(i = 0; i < args->locals.size; i++)
         free(args->locals.data[i]);
     list_free(&args->locals);
-
-
+    
     for(i = 0; i < args->extrns.size; i++)
         if(args->extrns.data[i] != buffer)
             free(args->extrns.data[i]);

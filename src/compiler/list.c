@@ -6,9 +6,9 @@
 void list_push(struct list *list, void *item)
 {
     if(!list->alloc)
-        list->data = malloc((list->alloc = 32));
-    else if(list->alloc - list->size < 1)
-        list->data = realloc(list->data, list->alloc *= 2);
+        list->data = malloc((list->alloc = 32) * sizeof(void*));
+    else if(list->alloc - list->size < 2)
+        list->data = realloc(list->data, (list->alloc *= 2) * sizeof(void*));
     list->data[list->size++] = item;
 }
 
