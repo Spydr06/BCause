@@ -52,6 +52,7 @@ const char* cmp_instruction[CMP_NE + 1] = {
 };
 
 static bool expression(struct compiler_args *args, FILE *in, FILE *out);
+static inline bool rvalue(struct compiler_args *args, FILE *in, FILE *out);
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
 static int subprocess(const char *arg0, const char *p_name, char *const *p_arg);
 
@@ -455,14 +456,14 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
     case '-': /* subtraction operator */
     case '*': /* multiplication operator */
         fprintf(out, "  push %%rax\n");
-        expression(args, in, out);
+        rvalue(args, in, out);
         fprintf(out, "  pop %%rdi\n  %s %%rdi, %%rax\n", c == '+' ? "add" : c == '-' ? "sub" : "imul");
         break;
     
     case '/': /* division operator */
     case '%': /* modulo operator */
         fprintf(out, "  push %%rax\n");
-        expression(args, in, out);
+        rvalue(args, in, out);
         fprintf(out, "  mov %%rax, %%rdi\n  pop %%rax\n  cqo\n  idiv %%rdi\n");
         if(c == '%')
             fprintf(out, "  mov %%rdx, %%rax\n");
@@ -472,7 +473,7 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
         switch(c = fgetc(in)) {
         case '<': /* shift-left operator */
             fprintf(out, "  push %%rax\n");
-            expression(args, in, out);
+            rvalue(args, in, out);
             fprintf(out, "  mov %%rax, %%rcx\n  pop %%rax\n  shl %%cl, %%rax\n");
             break;
         case '=': /* less-than-or-equal operator */
@@ -488,7 +489,7 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
         switch(c = fgetc(in)) {
         case '>': /* shift-right-operator */
             fprintf(out, "  push %%rax\n");
-            expression(args, in, out);
+            rvalue(args, in, out);
             fprintf(out, "  mov %%rax, %%rcx\n  pop %%rax\n  sar %%cl, %%rax\n");
             break;
         case '=': /* greater-than-or-equal operator */
@@ -518,13 +519,13 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
 
     case '&': /* bitwise and operator */
         fprintf(out, "  push %%rax\n");
-        expression(args, in, out);
+        rvalue(args, in, out);
         fprintf(out, "  pop %%rdi\n  and %%rdi, %%rax\n");
         break;
     
     case '|': /* bitwise or operator */
         fprintf(out, "  push %%rax\n");
-        expression(args, in, out);
+        rvalue(args, in, out);
         fprintf(out, "  pop %%rdi\n  or %%rdi, %%rax\n");
         break;
     default:
@@ -537,8 +538,6 @@ static bool bin_op(struct compiler_args *args, FILE *in, FILE *out, char c) {
 
 static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_is_lvalue)
 {
-    static size_t conditional = 0;
-    size_t this_conditional;
     char c, c1, c2;
     bool is_lvalue = false;
     int num_args = 0;
@@ -546,27 +545,13 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
     whitespace(args, in);
 
     switch(c = fgetc(in)) {
-    case '?': /* conditional operator */
-        this_conditional = conditional++;
-        fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", this_conditional);
-        expression(args, in, out);
-        whitespace(args, in);
-        if((c = fgetc(in)) != ':') {
-            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(":") " between conditional branches\n", c);
-            exit(1);
-        }
-        fprintf(out, "  jmp .L.cond.end.%ld\n.L.cond.else.%ld:\n", this_conditional, this_conditional);
-        expression(args, in, out);
-        fprintf(out, ".L.cond.end.%ld:\n", this_conditional);
-        break;
-
     case '+': /* postfix increment operator */
         if((c = fgetc(in)) != '+') {
             ungetc(c, in);
             if(left_is_lvalue)
                 fprintf(out, "  mov (%%rax), %%rax\n");
             fprintf(out, "  push %%rax\n");
-            expression(args, in, out);
+            rvalue(args, in, out);
             fprintf(out, "  pop %%rdi\n  add %%rdi, %%rax\n");
             break;
         }
@@ -590,7 +575,7 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
             if(left_is_lvalue)
                 fprintf(out, "  mov (%%rax), %%rax\n");
             fprintf(out, "  push %%rax\n");
-            expression(args, in, out);
+            rvalue(args, in, out);
             fprintf(out, "  pop %%rdi\n  sub %%rdi, %%rax\n");
             break;
         }
@@ -625,7 +610,7 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
         fprintf(out, "  push %%rax\n  mov (%%rax), %%rax\n");
 
         if(!bin_op(args, in, out, fgetc(in)))
-            expression(args, in, out);
+            rvalue(args, in, out);
 
         fprintf(out, "  pop %%rdi\n  mov %%rax, (%%rdi)\n");
         return false;
@@ -745,6 +730,7 @@ static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) 
                 exit(1);
             }
             fprintf(out, "  mov (%%rax), %%rdi\n  sub $1, %%rdi\n  mov %%rdi, (%%rax)\n");
+            is_lvalue = true;
         }
         else { /* negation operator */
             ungetc(c, in);
@@ -763,6 +749,7 @@ static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) 
             exit(1);
         }
         fprintf(out, "  mov (%%rax), %%rdi\n  add $1, %%rdi\n  mov %%rdi, (%%rax)\n");
+        is_lvalue = true;
         break;
 
     case '*': /* indirection operator */
@@ -814,16 +801,45 @@ static bool primary_expression(struct compiler_args *args, FILE *in, FILE *out) 
     return is_lvalue;
 }
 
-static inline bool expression(struct compiler_args *args, FILE *in, FILE *out)
+static inline bool rvalue(struct compiler_args *args, FILE *in, FILE *out)
 {
     return operator(args, in, out, primary_expression(args, in, out));
+}
+
+static bool expression(struct compiler_args *args, FILE *in, FILE *out)
+{
+    char c;
+    static size_t conditional = 0;
+    size_t this_conditional;
+    bool is_lvalue = operator(args, in, out, primary_expression(args, in, out));
+
+    whitespace(args, in);
+    switch(c = fgetc(in)) {
+    case '?': /* ternary operators have the lowest precedence, so they need to be resolved here */
+        this_conditional = conditional++;
+        fprintf(out, "  cmp $0, %%rax\n  je .L.cond.else.%ld\n", this_conditional);
+        expression(args, in, out);
+        whitespace(args, in);
+        if((c = fgetc(in)) != ':') {
+            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(":") " between conditional branches\n", c);
+            exit(1);
+        }
+        fprintf(out, "  jmp .L.cond.end.%ld\n.L.cond.else.%ld:\n", this_conditional, this_conditional);
+        expression(args, in, out);
+        fprintf(out, ".L.cond.end.%ld:\n", this_conditional);
+        return false;
+    default:
+        ungetc(c, in);
+        return is_lvalue;
+    }
 }
 
 static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_ident, intptr_t switch_id, struct list *cases)
 {
     char c, *name;
     static char buffer[BUFSIZ];
-    static size_t id, stmt_id = 0; /* unique id for each statement for generating labels */
+    size_t id;
+    static size_t stmt_id = 0; /* unique id for each statement for generating labels */
     intptr_t i, value = 0;
     struct list switch_case_list;
 
