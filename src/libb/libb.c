@@ -7,20 +7,38 @@
     #define B_TYPE long long
 #endif
 #ifndef B_FN
+    /* this macro allows to give each B std function a pre- or postfix
+       to avoid issues with common names
+       e.g.: #define B_FN(name) __b##name <-- gives each B funcion the prefix "__b" */
     #define B_FN(name) name
 #endif
 
+// defines the argument buffer size of execl()
+#ifndef MAX_EXECL_ARGS
+    #define MAX_EXECL_ARGS 128
+#endif
+
+// NULL pointer definition
 #define NULL ((void*) 0)
 
+// standard unix IO files
 #define stdin  0
 #define stdout 1
 #define stderr 2
+
+/*
+VAList wrapper implementation
+*/
 
 /* VA aliases */
 #define va_start __builtin_va_start
 #define va_end __builtin_va_end
 #define va_arg __builtin_va_arg
 #define va_list __builtin_va_list
+
+/*
+Syscall wrapper implementation
+*/
 
 /* type used for syscalls */
 #define SYSCALL_TYPE long
@@ -102,13 +120,51 @@ static inline SYSCALL_TYPE __syscall3(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_T
 #define SYS_setuid 105
 #define SYS_time 201
 
+/*
+assert implementation
+*/
+
+#define assert(condition) ((void)((condition) || (__assert_fail(#condition, __FILE__, __LINE__, __func__), 0)))
+#define write_str(string) (syscall(SYS_write, 1, (string), strlen((string))))
+
+void B_FN(printn)(B_TYPE n, B_TYPE b);
+
+static long strlen(const char* string)
+{
+    long i = 0;
+    while(string[i++]);
+    return i - 1;
+}
+
+static void __assert_fail(const char* condition, const char* file, const int line, const char* func)
+{
+    write_str("Assertion failed: ");
+    write_str(condition);
+    write_str(" (");
+    write_str(file);
+    write_str(": ");
+    write_str(func);
+    write_str(": ");
+    B_FN(printn)(line, 10);
+    write_str(")\n");
+
+    syscall(SYS_exit, 127);
+}
+
+/*
+B standard library implementation
+*/
+
 /* The `main` function must be declared in any B program */
-extern long B_FN(main)(void);
+extern B_TYPE B_FN(main)(void);
 void B_FN(exit)(void);
 
 /* entry point of any B program */
 void _start(void) __asm__ ("_start"); /* assure, that _start is really named _start in asm */
 void _start(void) {
+    assert(sizeof(B_TYPE) == sizeof(void*)); /* assert that the size of the B type is equal 
+                                                to the word (address) size. This is crucial
+                                                for any B program to work correctly.*/
     B_TYPE code = B_FN(main)();
     syscall(SYS_exit, code);
 }
@@ -210,8 +266,17 @@ void B_FN(ctime)(B_TYPE time_vec, B_TYPE date) {
    file specified by string. The arg-i strings are passed as
    arguments. A return indicates an error. */
 void B_FN(execl)(B_TYPE string, ...) {
-    (void) string;
-    // TODO
+    static B_TYPE args[MAX_EXECL_ARGS];
+    B_TYPE envp;
+    int i = 0;
+
+    va_list ap;
+    va_start(ap, string);
+
+    while((args[i] = va_arg(ap, B_TYPE)) && i <= MAX_EXECL_ARGS);
+
+    syscall(SYS_execve, string, args, &envp);
+    va_end(ap);
 }
 
 /* The current process is replaced by the execution of the
@@ -423,7 +488,6 @@ B_TYPE B_FN(unlink)(B_TYPE string) {
    ror. */
 B_TYPE B_FN(wait)(void) {
     // TODO
-    (void) wait;
     return -1;
 }
 
