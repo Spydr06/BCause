@@ -17,6 +17,15 @@ BCause is implemented as a small single-pass compiler in ~1800 lines of pure C99
 - [ ] optimization
 - [ ] nicer error messages
 
+### Compatibility
+
+Due to BCause's simplicity, only **`gnu-linux-x86_64`**-systems are supported.
+
+- If your system can run *GNU-`make`*, *GNU-`ld`* and *GNU-`as`*, BCause itself should be able to work.
+- Because of the reliance on system-calls `libb.a` has to be implemented for each system seperately.
+
+> **Note:** Feel free to submit pull requests to provide more OS support and fix bugs.
+
 ### Installation
 
 To install BCause, first clone this repository:
