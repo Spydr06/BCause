@@ -4,7 +4,7 @@
 
 This repository also includes a `libb.a` implementation, B's standard library. It requires zero dependencies, not even libc.
 
-BCause is implemented as a small single-pass compiler in ~1800 lines of pure C99 code. Therefore, it features small compile times with a very low memory footprint.
+BCause is implemented as a small single-pass compiler in ~2000 lines of pure C99 code. Therefore, it features small compile times with a very low memory footprint.
 
 ### Current Status
 
