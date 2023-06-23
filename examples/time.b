@@ -3,7 +3,7 @@
 
 main() {
     extrn nwrite, lchar, buffer, ctime, time;
-    auto tv 0;
+    auto tv;
 
     time(&tv);
     ctime(&tv, &buffer);
