@@ -51,6 +51,23 @@ const char* cmp_instruction[CMP_NE + 1] = {
     "setne",
 };
 
+struct stack_var {
+    char* name;
+    unsigned long offset;
+};
+
+inline static struct stack_var* init_stack_var(const char* name, unsigned long offset) {
+    struct stack_var* ptr = malloc(sizeof(struct stack_var));
+    ptr->name = strdup(name);
+    ptr->offset = offset;
+    return ptr;
+}
+
+inline static void free_stack_var(struct stack_var* ptr) {
+    free(ptr->name);
+    free(ptr);
+}
+
 static bool expression(struct compiler_args *args, FILE *in, FILE *out);
 static inline bool rvalue(struct compiler_args *args, FILE *in, FILE *out);
 static void declarations(struct compiler_args *args, FILE *in, FILE *buffer);
@@ -125,6 +142,8 @@ int compile(struct compiler_args *args)
             "-L.", "-L/lib64", "-L/usr/local/lib64",
             "-lb",
             "-o", args->output_file,
+            "-z",
+            "noexecstack",
             0
         }))) {
             eprintf(args->arg0, "error running linker (exit code %d)\n", exit_code);
@@ -672,12 +691,14 @@ static bool operator(struct compiler_args *args, FILE *in, FILE *out, bool left_
 static intptr_t find_identifier(struct compiler_args *args, const char *buffer, bool *is_extrn)
 {
     size_t i;
+    struct stack_var* var;
 
     for(i = 0; i < args->locals.size; i++) {
-        if(strcmp(buffer, args->locals.data[i]) == 0) {
+        var = (struct stack_var*) args->locals.data[i];
+        if(strcmp(buffer, var->name) == 0) {
             if(is_extrn)
                 *is_extrn = false;
-            return i;
+            return var->offset;
         }
     }
 
@@ -1027,8 +1048,20 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     }
                     whitespace(args, in);
 
+                    // default 'auto' vector size is 1;
+                    value = 1;
                     if((c = fgetc(in)) == '\'') {
                         value = character(args, in);
+                        whitespace(args, in);
+                        c = fgetc(in);
+                    }
+                    else if(c == '[') {
+                        value = number(args, in);
+                        whitespace(args, in);
+                        if((c = fgetc(in)) != ']') {
+                            eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT("]") "\n", c);
+                            exit(1);
+                        }
                         whitespace(args, in);
                         c = fgetc(in);
                     }
@@ -1044,9 +1077,12 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                         exit(1);
                     }
 
-                    list_push(&args->locals, strdup(buffer));
+                    list_push(&args->locals, init_stack_var(buffer, args->stack_offset));
+                    args->stack_offset += value;
 
-                    fprintf(out, "  sub $%u, %%rsp\n  movq $%lu, -%lu(%%rbp)\n", args->word_size, value, (args->locals.size + 1) * args->word_size);
+                    fprintf(out, "  sub $%lu, %%rsp\n", args->word_size * value);
+                   // while(value--)
+                   //     fprintf(out, "  movq $0, -%lu(%%rbp)\n", (args->stack_items - value) * args->word_size);
                 } while((c) == ',');
 
                 if(c != ';') {
@@ -1093,7 +1129,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
 
 static void arguments(struct compiler_args *args, FILE *in, FILE *out)
 {
-    char c, *name;
+    char c;
     int i = 0;
     static char buffer[BUFSIZ];
 
@@ -1103,11 +1139,9 @@ static void arguments(struct compiler_args *args, FILE *in, FILE *out)
             eprintf(args->arg0, "expect " QUOTE_FMT(")") " or identifier after function arguments\n");
             exit(1);
         }
-        fprintf(out, "  sub $%u, %%rsp\n  mov %s, -%lu(%%rbp)\n", args->word_size, arg_registers[i++], (args->locals.size + 2) * args->word_size);   
+        fprintf(out, "  sub $%u, %%rsp\n  mov %s, -%lu(%%rbp)\n", args->word_size, arg_registers[i++], (args->stack_offset + 2) * args->word_size);   
 
-        name = calloc(strlen(buffer) + 1, sizeof(char));
-        strcpy(name, buffer);
-        list_push(&args->locals, name);
+        list_push(&args->locals, init_stack_var(strdup(buffer), args->stack_offset++));
 
         whitespace(args, in);
         switch(c = fgetc(in)) {
@@ -1128,8 +1162,9 @@ static void function(struct compiler_args *args, FILE *in, FILE *out, char *fn_i
     char c;
 
     for(i = 0; i < args->locals.size; i++)
-        free(args->locals.data[i]);
+        free_stack_var((struct stack_var*) args->locals.data[i]);
     list_clear(&args->locals);
+    args->stack_offset = 0;
 
     for(i = 0; i < args->extrns.size; i++)
         if(args->extrns.data[i] != fn_id)
@@ -1223,8 +1258,9 @@ static void declarations(struct compiler_args *args, FILE *in, FILE *out)
     strings(args, out);
 
     for(i = 0; i < args->locals.size; i++)
-        free(args->locals.data[i]);
+        free_stack_var((struct stack_var*) args->locals.data[i]);
     list_free(&args->locals);
+    args->stack_offset = 0;
     
     for(i = 0; i < args->extrns.size; i++)
         if(args->extrns.data[i] != buffer)

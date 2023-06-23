@@ -29,6 +29,7 @@ struct compiler_args {
     bool save_temps;    /* should temporary files get deleted? */
 
     struct list locals; /* local variables */
+    unsigned long stack_offset; /* local variable offset */
     struct list extrns; /* extrn variables */
 
     struct list strings; /* string table */
