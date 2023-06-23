@@ -302,7 +302,7 @@ void B_FN(exit)(void) {
    returned a zero. The parent process is returned the pro-
    cess ID of the child. A negative number returned indicates
    an error. */
-B_TYPE B_FN(fork)() {
+B_TYPE B_FN(fork)(void) {
     return (B_TYPE) syscall(SYS_fork);
 }
 
@@ -487,8 +487,8 @@ B_TYPE B_FN(unlink)(B_TYPE string) {
    is returned. A negative number returned indicates an er-
    ror. */
 B_TYPE B_FN(wait)(void) {
-    // TODO
-    return -1;
+    int child_status;
+    return (B_TYPE) syscall(SYS_wait4, -1, &child_status, 0);
 }
 
 /* Count bytes are written out of the vector buffer on the

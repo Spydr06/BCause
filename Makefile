@@ -1,6 +1,6 @@
 SHELL = /bin/sh
 
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -O2
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -g
 CFLAGS_LIBB = -nostdlib -c 					\
 	-Wno-incompatible-library-redeclaration \
 	-Wno-builtin-declaration-mismatch       \
