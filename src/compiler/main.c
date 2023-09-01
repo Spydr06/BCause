@@ -69,11 +69,15 @@ int main(int argc, char **argv)
             c_args.output_file = argv[++i];
         }
         else if(strcmp(argv[i], "-S") == 0) {
+            c_args.output_file = A_S;
             c_args.do_assembling = false;
             c_args.do_linking = false;
         }
         else if(strcmp(argv[i], "-c") == 0)
+        {
+            c_args.output_file = A_O;
 			c_args.do_linking = false;
+        }
         else if(strcmp(argv[i], "-save-temps") == 0)
             c_args.save_temps = true;
         else if(argv[i][0] == '-') {
