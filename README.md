@@ -24,7 +24,8 @@ Due to BCause's simplicity, only **`gnu-linux-x86_64`**-systems are supported.
 - If your system can run *GNU-`make`*, *GNU-`ld`* and *GNU-`as`*, BCause itself should be able to work.
 - Because of the reliance on system-calls `libb.a` has to be implemented for each system separately.
 
-> **Note:** Feel free to submit pull requests to provide more OS support and fix bugs.
+> **Note**
+> Feel free to submit pull requests to provide more OS support and fix bugs.
 
 ### Installation
 
