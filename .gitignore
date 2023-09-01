@@ -4,3 +4,4 @@
 *.out
 *.a
 vgcore.*
+compile_commands.json

@@ -57,7 +57,7 @@ struct stack_var {
 };
 
 inline static struct stack_var* init_stack_var(const char* name, unsigned long offset) {
-    struct stack_var* ptr = malloc(sizeof(struct stack_var));
+    struct stack_var* ptr = (struct stack_var*) malloc(sizeof(struct stack_var));
     ptr->name = strdup(name);
     ptr->offset = offset;
     return ptr;
@@ -307,7 +307,7 @@ static void string(struct compiler_args *args, FILE *in) {
     char c;
     size_t alloc = 32;
     size_t size = 0;
-    char *string = calloc(alloc, sizeof(char));
+    char *string = (char*) calloc(alloc, sizeof(char));
     
     while((c = fgetc(in)) != '"') {
         if(c == '*') {
@@ -340,7 +340,7 @@ static void string(struct compiler_args *args, FILE *in) {
         string[size] = c;
         size++;
         if(size >= alloc)
-            string = realloc(string, (alloc *= 2) * sizeof(char));
+            string = (char*) realloc(string, (alloc *= 2) * sizeof(char));
     }
 
     list_push(&args->strings, string);
@@ -866,14 +866,24 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
 
     whitespace(args, in);
     switch (c = fgetc(in)) {
-    case '{':
+    case '{': 
+    {
+        unsigned long stack_offset = args->stack_offset;
+
         whitespace(args, in);
         while((c = fgetc(in)) != '}') {
             ungetc(c, in);
             statement(args, in, out, fn_ident, switch_id, cases);
             whitespace(args, in);
         }
-        break;
+
+        // reset stack so variables in loops don't overflow the stack
+        if(stack_offset != args->stack_offset)
+        {
+            fprintf(out, "  add $%lu, %%rsp\n", (args->stack_offset - stack_offset) * args->word_size);
+            args->stack_offset = stack_offset;
+        }
+    } break;
     
     case ';':
         break; /* null statement */
@@ -1089,6 +1099,14 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out, char* fn_
                     eprintf(args->arg0, "unexpected character " QUOTE_FMT("%c") ", expect " QUOTE_FMT(";") " or " QUOTE_FMT(",") "\n", c);
                     exit(1);
                 }
+
+                // align stack to 16 bytes
+                if(args->stack_offset % 2)
+                {
+                    fprintf(out, "  sub $%u, %%rsp\n", args->word_size);
+                    args->stack_offset++;
+                }
+
                 return;
             }
             else {
@@ -1210,7 +1228,7 @@ static void strings(struct compiler_args *args, FILE *out)
     for(i = 0; i < args->strings.size; i++) {
         fprintf(out, ".string.%lu:\n", i);
 
-        string = args->strings.data[i];
+        string = (char*) args->strings.data[i];
         size = strlen(string);
         for(j = 0; j < size; j++)
             fprintf(out, "  .byte %u\n", string[j]);
