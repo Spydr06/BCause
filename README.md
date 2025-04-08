@@ -4,7 +4,7 @@
 
 This repository also includes a `libb.a` implementation, B's standard library. It requires zero dependencies, not even libc.
 
-BCause is implemented as a small single-pass compiler in ~2000 lines of pure C99 code. Therefore, it features small compile times with a very low memory footprint.
+BCause is implemented as a small single-pass compiler in ~2500 lines of pure C99 code. Therefore, it features small compile times with a very low memory footprint.
 
 ### Current Status
 
@@ -55,6 +55,14 @@ $ bcause <your file>
 To get help, type:
 ```console
 $ bcause --help
+```
+
+### Testing
+
+The `tests/` directory contains numerous compiler tests. Please update these tests when adding new features. Tests are based on googletest and require `cmake` to be run:
+
+```console
+$ make test
 ```
 
 ### Licensing
