@@ -1,10 +1,11 @@
-// 
+//
 // This is a minimal implementation of libb, the standard library for the B programming language (1969)
 //
-
+#include <stdarg.h>
 #ifndef B_TYPE
     /* type representing B's single data type (64-bit int on x86_64) */
-    #define B_TYPE long long
+    #include <stdint.h>
+    #define B_TYPE intptr_t
 #endif
 #ifndef B_FN
     /* this macro allows to give each B std function a pre- or postfix
@@ -18,23 +19,10 @@
     #define MAX_EXECL_ARGS 128
 #endif
 
-// NULL pointer definition
-#define NULL ((void*) 0)
-
 // standard unix IO files
 #define stdin  0
 #define stdout 1
 #define stderr 2
-
-/*
-VAList wrapper implementation
-*/
-
-/* VA aliases */
-#define va_start __builtin_va_start
-#define va_end __builtin_va_end
-#define va_arg __builtin_va_arg
-#define va_list __builtin_va_list
 
 /*
 Syscall wrapper implementation
@@ -42,14 +30,6 @@ Syscall wrapper implementation
 
 /* type used for syscalls */
 #define SYSCALL_TYPE long
-
-static inline SYSCALL_TYPE __syscall_ret(unsigned SYSCALL_TYPE r)
-{
-	if (r > -4096UL) {
-		return -1;
-	}
-	return r;
-}
 
 static inline SYSCALL_TYPE __syscall0(SYSCALL_TYPE n)
 {
@@ -94,7 +74,7 @@ static inline SYSCALL_TYPE __syscall3(SYSCALL_TYPE n, SYSCALL_TYPE a1, SYSCALL_T
 #define __SYSCALL_DISP(b,...) __SYSCALL_CONCAT(b,__SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
 
 #define __syscall(...) __SYSCALL_DISP(__syscall,__VA_ARGS__)
-#define syscall(...) __syscall_ret(__syscall(__VA_ARGS__))
+#define syscall(...) __syscall(__VA_ARGS__)
 
 /* syscall ids */
 #define SYS_read 0
@@ -127,7 +107,9 @@ assert implementation
 #define assert(condition) ((void)((condition) || (__assert_fail(#condition, __FILE__, __LINE__, __func__), 0)))
 #define write_str(string) (syscall(SYS_write, 1, (string), strlen((string))))
 
+/* predefine some functions */
 void B_FN(printn)(B_TYPE n, B_TYPE b);
+void B_FN(putchar)(B_TYPE chr);
 
 static long strlen(const char* string)
 {
@@ -162,7 +144,7 @@ void B_FN(exit)(void);
 /* entry point of any B program */
 void _start(void) __asm__ ("_start"); /* assure, that _start is really named _start in asm */
 void _start(void) {
-    assert(sizeof(B_TYPE) == sizeof(void*)); /* assert that the size of the B type is equal 
+    assert(sizeof(B_TYPE) == sizeof(void*)); /* assert that the size of the B type is equal
                                                 to the word (address) size. This is crucial
                                                 for any B program to work correctly.*/
     B_TYPE code = B_FN(main)();
@@ -359,10 +341,6 @@ B_TYPE B_FN(open)(B_TYPE string, B_TYPE mode) {
     return (B_TYPE) syscall(SYS_open, string, mode);
 }
 
-/* predefine some functions */
-void B_FN(printn)(B_TYPE n, B_TYPE b);
-void B_FN(putchar)(B_TYPE chr);
-
 /* The following function is a general formatting, printing, and
    conversion subroutine. The first argument is a format string.
    Character sequences,of the form ‘%x’ are interpreted and cause
@@ -379,28 +357,33 @@ loop:
             goto end;
         B_FN(putchar)(c);
     }
-    x = va_arg(ap, B_TYPE);
     switch(c = B_FN(_char)(fmt, i++)) {
         case 'd': /* decimal */
         case 'o': /* octal */
+            x = va_arg(ap, B_TYPE);
             if(x < 0) {
                 x = -x;
                 B_FN(putchar)('-');
             }
             B_FN(printn)(x, c == 'o' ? 8 : 10);
             goto loop;
-        
+
         case 'c':
+            x = va_arg(ap, B_TYPE);
             B_FN(putchar)(x);
             goto loop;
-        
+
         case 's':
+            x = va_arg(ap, B_TYPE);
             j = 0;
             while((c = B_FN(_char)(x, j++)) != '\0')
                 B_FN(putchar)(c);
             goto loop;
+        case '%':
+            B_FN(putchar)('%');
+            goto loop;
     }
-    B_FN(putchar)('%');
+    B_FN(putchar)(c);
     i--;
     goto loop;
 
@@ -414,7 +397,7 @@ end:
    code values. */
 void B_FN(printn)(B_TYPE n, B_TYPE b) {
     B_TYPE a;
-    
+
     if(n < 0) {
         B_FN(putchar)('-');
         n = -n;
@@ -427,7 +410,16 @@ void B_FN(printn)(B_TYPE n, B_TYPE b) {
 
 /* The character char is written on the standard output file. */
 void B_FN(putchar)(B_TYPE chr) {
-    syscall(SYS_write, 1, &chr, sizeof(B_TYPE));
+    union {
+        B_TYPE word;
+        char c[sizeof(B_TYPE)];
+    } u;
+    unsigned len = sizeof(B_TYPE);
+
+    u.word = chr;
+    while (len > 1 && u.c[len-1] == 0)
+        len--;
+    syscall(SYS_write, 1, (B_TYPE)&u, len);
 }
 
 /* Count bytes are read into the vector buffer from the open
@@ -440,7 +432,7 @@ B_TYPE B_FN(nread)(B_TYPE file, B_TYPE buffer, B_TYPE count) {
 
 /* The I/O pointer on the open file designated by file is set
    to the value of the designated pointer plus the offset. A
-   pointer of zero designates the beginning of the file. A 
+   pointer of zero designates the beginning of the file. A
    pointer of one designates the current 1/0 pointer. A
    pointer of two designates the end of the file. A negative
    number returned indicates an error. */

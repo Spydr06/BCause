@@ -5,7 +5,7 @@
 #include "list.h"
 
 #define A_OUT "a.out"
-#define A_S   "a.S"
+#define A_S   "a.s"
 #define A_O   "a.o"
 
 #define COLOR_RESET      "\033[0m"
@@ -18,6 +18,7 @@
 
 struct compiler_args {
     const char *arg0; /* name of the executable */
+    char *lib_dir; /* location of B library */
     char *output_file; /* output file */
     char **input_files; /* input files */
     int num_input_files; /* number of input files */
