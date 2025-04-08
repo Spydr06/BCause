@@ -1,10 +1,7 @@
 SHELL = /bin/sh
 
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -g
-CFLAGS_LIBB = -nostdlib -c 					\
-	-Wno-incompatible-library-redeclaration \
-	-Wno-builtin-declaration-mismatch       \
-	-ffreestanding
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -g -O
+CFLAGS_LIBB = -nostdlib -c -Wno-builtin-declaration-mismatch
 
 COMPILER_FILES = $(shell find src/compiler -name '*.c')
 LIBB_FILES = $(shell find src/libb -name '*.c')
@@ -29,7 +26,7 @@ ${BCAUSE_EXEC}:
 .PHONY: libb
 libb: libb.a
 ${LIBB_BIN}: libb.o
-	ar ruv $@ $<
+	ar rv $@ $<
 	ranlib $@
 
 libb.o:
@@ -37,4 +34,12 @@ libb.o:
 
 .PHONY: clean
 clean:
-	rm -rf *.o *.a *.out ${BCAUSE_EXEC}
+	rm -rf *.o *.a *.out ${BCAUSE_EXEC} build
+
+.PHONY: test
+test:   build
+	make -C build btest
+	make -C build test
+
+build:
+	cmake -B build tests
