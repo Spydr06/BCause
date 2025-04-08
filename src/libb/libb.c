@@ -299,7 +299,8 @@ B_TYPE B_FN(fstat)(B_TYPE file, B_TYPE status) {
    turned. The character ‘*e’ is returned for an end-of-file. */
 B_TYPE B_FN(getchar)(void) {
     char c;
-    syscall(SYS_read, &c, stdin);
+    if (syscall(SYS_read, stdin, &c, 1) != 1)
+        return 0;
     return c;
 }
 
