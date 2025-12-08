@@ -70,6 +70,6 @@ BCause is licensed under the MIT License. See `LICENSE` in this repository for f
 
 ### References
 
-- [Bell Labs User's Reference to B](https://www.bell-labs.com/usr/dmr/www/kbman.pdf) by Ken Thompson (Jan. 7, 1972)
+- [Bell Labs User's Reference to B](https://web.archive.org/web/20241217103914/https://www.bell-labs.com/usr/dmr/www/kbman.pdf) by Ken Thompson (Jan. 7, 1972)
 
 - Wikipedia entry: [B (programming language)](https://en.wikipedia.org/wiki/B_(programming_language))
