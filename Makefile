@@ -4,7 +4,7 @@ CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -g
 CFLAGS_LIBB = -nostdlib -c 					\
 	-Wno-incompatible-library-redeclaration \
 	-Wno-builtin-declaration-mismatch       \
-	-ffreestanding
+	-ffreestanding -fno-stack-protector
 
 COMPILER_FILES = $(shell find src/compiler -name '*.c')
 LIBB_FILES = $(shell find src/libb -name '*.c')
