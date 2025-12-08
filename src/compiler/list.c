@@ -20,6 +20,6 @@ void list_clear(struct list *list)
 
 void list_free(struct list *list)
 {
-    if(list->alloc)
-        free(list->data);
+    if(list->alloc) free(list->data);
+    list->size = list->alloc = 0;
 }

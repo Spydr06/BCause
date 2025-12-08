@@ -469,7 +469,7 @@ static void string(struct compiler_args *args, FILE *in)
         if (size >= alloc)
             string = (char*) realloc(string, (alloc *= 2) * sizeof(char));
     }
-
+    string[size] = 0;
     list_push(&args->strings, string);
 }
 
