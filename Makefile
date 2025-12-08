@@ -1,7 +1,9 @@
-SHELL = /bin/sh
-
 CFLAGS = -std=c99 -Wall -Wextra -pedantic -g -O
-CFLAGS_LIBB = -nostdlib -c -Wno-builtin-declaration-mismatch
+
+CFLAGS_LIBB = -nostdlib -c 					\
+	-Wno-incompatible-library-redeclaration \
+	-Wno-builtin-declaration-mismatch       \
+	-ffreestanding -fno-stack-protector
 
 COMPILER_FILES = $(shell find src/compiler -name '*.c')
 LIBB_FILES = $(shell find src/libb -name '*.c')
