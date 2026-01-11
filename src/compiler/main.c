@@ -14,6 +14,7 @@ static inline void version(char *arg0)
     printf("%s " BCAUSE_VERSION "\n"
         "Copyright (C) 2022 Spydr06\n"
         "Copyright (C) 2025 sergev\n"
+        "Copyright (C) 2026 miublue\n"
         "This is free software; see the source for copying conditions.\n"
         "There is NO warranty.\n",
         arg0
