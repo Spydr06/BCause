@@ -107,6 +107,8 @@ struct stack_var {
 };
 
 static struct {
+    // TODO: 'whitespace' skips line before checking for semicolon,
+    // so displaying errors expecting semicolons may show wrong line.
     const char *file_name;
     unsigned long line;
 } compiler_pos;
