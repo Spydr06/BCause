@@ -24,13 +24,13 @@ static inline void help(char *arg0)
 {
     printf("Usage: %s [options] file...\n"
         "Options:\n"
-        "--help      Display this information.\n"
-        "--version   Display compiler version information.\n"
-        "-o <file>   Place the output into <file>.\n"
-        "-L<dir>     Location of B library.\n"
-	"-S          Compile only; do not assemble or link.\n"
-        "-c          Compile and assemble, but do not link.\n"
-        "-save-temps Do not delete intermediate files.\n",
+        "-h --help    Display this information.\n"
+        "-v --version Display compiler version information.\n"
+        "-o <file>    Place the output into <file>.\n"
+        "-L<dir>      Location of B library.\n"
+        "-S           Compile only; do not assemble or link.\n"
+        "-c           Compile and assemble, but do not link.\n"
+        "-save-temps  Do not delete intermediate files.\n",
         arg0
     );
 }
@@ -57,11 +57,11 @@ int main(int argc, char **argv)
 
     for(int i = 1; i < argc; i++)
     {
-        if(strcmp(argv[i], "--help") == 0) {
+        if(strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             help(argv[0]);
             return 0;
         }
-        else if(strcmp(argv[i], "--version") == 0) {
+        else if(strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             version(argv[0]);
             return 0;
         }
