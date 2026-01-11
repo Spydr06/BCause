@@ -299,7 +299,7 @@ static int subprocess(const char *arg0, const char *p_name, char *const *p_arg)
 // Parse a comment.
 // It starts with /* and finishes with */.
 //
-static void comment(struct compiler_args *args, FILE *in)
+static void comment(FILE *in)
 {
     int c;
 
@@ -321,6 +321,7 @@ static void comment(struct compiler_args *args, FILE *in)
 //
 static void whitespace(struct compiler_args *args, FILE *in)
 {
+    (void) args;
     int c;
 
     while ((c = fgetc(in)) != EOF) {
@@ -331,7 +332,7 @@ static void whitespace(struct compiler_args *args, FILE *in)
 
         if (c == '/') {
             if ((c = fgetc(in)) == '*') {
-                comment(args, in);
+                comment(in);
                 continue;
             }
             else {
