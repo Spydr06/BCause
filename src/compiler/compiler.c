@@ -1247,6 +1247,7 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out,
     static char buffer[BUFSIZ];
     size_t id;
     static size_t stmt_id = 0; /* unique id for each statement for generating labels */
+    static unsigned long last_block_line = 1;
     intptr_t i, value = 0;
     struct list switch_case_list;
 
@@ -1254,9 +1255,15 @@ static void statement(struct compiler_args *args, FILE *in, FILE *out,
     switch (c = fgetc(in)) {
     case '{': {
         unsigned long stack_offset = args->stack_offset;
+        last_block_line = compiler_pos.line;
 
         whitespace(args, in);
         while ((c = fgetc(in)) != '}') {
+            if (c == EOF) {
+                compiler_pos.line = last_block_line;
+                eprintf(get_pos(), "unexpected end of file, expect " QUOTE_FMT("}") "\n");
+                exit(1);
+            }
             ungetc(c, in);
             statement(args, in, out, fn_ident, switch_id, cases);
             whitespace(args, in);
