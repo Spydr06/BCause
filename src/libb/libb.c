@@ -229,19 +229,19 @@ void B_FN(ctime)(B_TYPE time_vec, B_TYPE date) {
 
     date_vec[0] = month_strs[month][0];
     date_vec[1] = month_strs[month][1];
-    date_vec[3] = month_strs[month][2];
-    date_vec[4] = ' ';
-    date_vec[5] = day / 10 + '0';
-    date_vec[6] = day % 10 + '0';
-    date_vec[7] = ' ';
-    date_vec[8] = hour / 10 + '0';
-    date_vec[9] = hour % 10 + '0';
-    date_vec[10] = ':';
-    date_vec[11] = minute / 10 + '0';
-    date_vec[12] = minute % 10 + '0';
-    date_vec[13] = ':';
-    date_vec[14] = second / 10 + '0';
-    date_vec[15] = second % 10 + '0';
+    date_vec[2] = month_strs[month][2];
+    date_vec[3] = ' ';
+    date_vec[4] = day / 10 + '0';
+    date_vec[5] = day % 10 + '0';
+    date_vec[6] = ' ';
+    date_vec[7] = hour / 10 + '0';
+    date_vec[8] = hour % 10 + '0';
+    date_vec[9] = ':';
+    date_vec[10] = minute / 10 + '0';
+    date_vec[11] = minute % 10 + '0';
+    date_vec[12] = ':';
+    date_vec[13] = second / 10 + '0';
+    date_vec[14] = second % 10 + '0';
 }
 
 /* The current process is replaced by the execution of the
