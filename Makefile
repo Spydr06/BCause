@@ -1,6 +1,5 @@
-SHELL = /bin/sh
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -g -O
 
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -fPIC -g
 CFLAGS_LIBB = -nostdlib -c 					\
 	-Wno-incompatible-library-redeclaration \
 	-Wno-builtin-declaration-mismatch       \
@@ -29,7 +28,7 @@ ${BCAUSE_EXEC}:
 .PHONY: libb
 libb: libb.a
 ${LIBB_BIN}: libb.o
-	ar ruv $@ $<
+	ar rv $@ $<
 	ranlib $@
 
 libb.o:
@@ -37,4 +36,12 @@ libb.o:
 
 .PHONY: clean
 clean:
-	rm -rf *.o *.a *.out ${BCAUSE_EXEC}
+	rm -rf *.o *.a *.out ${BCAUSE_EXEC} build
+
+.PHONY: test
+test:   build
+	make -C build btest
+	make -C build test
+
+build:
+	cmake -B build tests

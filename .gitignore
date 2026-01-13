@@ -1,7 +1,9 @@
 .cache/
 .vscode/
+build/
 *.o
 *.out
 *.a
 vgcore.*
 compile_commands.json
+bcause

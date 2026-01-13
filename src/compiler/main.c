@@ -13,20 +13,22 @@ static inline void version(char *arg0)
 {
     printf("%s " BCAUSE_VERSION "\n"
         "Copyright (C) 2022 Spydr06\n"
+        "Copyright (C) 2025 sergev\n"
         "This is free software; see the source for copying conditions.\n"
         "There is NO warranty.\n",
         arg0
     );
 }
 
-static inline void help(char *arg0) 
+static inline void help(char *arg0)
 {
     printf("Usage: %s [options] file...\n"
         "Options:\n"
         "--help      Display this information.\n"
         "--version   Display compiler version information.\n"
         "-o <file>   Place the output into <file>.\n"
-		"-S          Compile only; do not assemble or link.\n"
+        "-L<dir>     Location of B library.\n"
+	"-S          Compile only; do not assemble or link.\n"
         "-c          Compile and assemble, but do not link.\n"
         "-save-temps Do not delete intermediate files.\n",
         arg0
@@ -39,6 +41,7 @@ static inline void set_default_args(struct compiler_args *args, const char *arg0
     memset(args, 0, sizeof(struct compiler_args));
 
     args->arg0 = arg0;
+    args->lib_dir = "-L.";
     args->output_file = A_OUT;
     args->input_files = input_files;
     args->do_assembling = args->do_linking = true;
@@ -68,6 +71,9 @@ int main(int argc, char **argv)
             }
             c_args.output_file = argv[++i];
         }
+        else if(strncmp(argv[i], "-L", 2) == 0) {
+            c_args.lib_dir = argv[i];
+        }
         else if(strcmp(argv[i], "-S") == 0) {
             c_args.output_file = A_S;
             c_args.do_assembling = false;
@@ -76,7 +82,7 @@ int main(int argc, char **argv)
         else if(strcmp(argv[i], "-c") == 0)
         {
             c_args.output_file = A_O;
-			c_args.do_linking = false;
+            c_args.do_linking = false;
         }
         else if(strcmp(argv[i], "-save-temps") == 0)
             c_args.save_temps = true;
