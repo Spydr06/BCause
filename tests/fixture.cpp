@@ -36,7 +36,7 @@ std::string bcause::compile_and_run(const std::string &source_code)
 
     // Compile B source into executable binary.
     std::string result;
-    run_command(result, "../bcause -save-temps -L.. " + b_filename + " -o " + exe_filename);
+    run_command(result, "../bcause --save-temps -L.. " + b_filename + " -o " + exe_filename);
 
     // Run the binary.
     run_command(result, "./" + exe_filename);

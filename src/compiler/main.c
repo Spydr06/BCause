@@ -12,8 +12,9 @@
 static inline void version(char *arg0)
 {
     printf("%s " BCAUSE_VERSION "\n"
-        "Copyright (C) 2022 Spydr06\n"
+        "Copyright (C) 2022-2026 spydr06\n"
         "Copyright (C) 2025 sergev\n"
+        "Copyright (C) 2026 miublue\n"
         "This is free software; see the source for copying conditions.\n"
         "There is NO warranty.\n",
         arg0
@@ -24,13 +25,13 @@ static inline void help(char *arg0)
 {
     printf("Usage: %s [options] file...\n"
         "Options:\n"
-        "--help      Display this information.\n"
-        "--version   Display compiler version information.\n"
-        "-o <file>   Place the output into <file>.\n"
-        "-L<dir>     Location of B library.\n"
-	"-S          Compile only; do not assemble or link.\n"
-        "-c          Compile and assemble, but do not link.\n"
-        "-save-temps Do not delete intermediate files.\n",
+        "-h --help    Display this information.\n"
+        "-v --version Display compiler version information.\n"
+        "-o <file>    Place the output into <file>.\n"
+        "-L<dir>      Location of B library.\n"
+        "-S           Compile only; do not assemble or link.\n"
+        "-c           Compile and assemble, but do not link.\n"
+        "--save-temps Do not delete intermediate files.\n",
         arg0
     );
 }
@@ -57,11 +58,11 @@ int main(int argc, char **argv)
 
     for(int i = 1; i < argc; i++)
     {
-        if(strcmp(argv[i], "--help") == 0) {
+        if(strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             help(argv[0]);
             return 0;
         }
-        else if(strcmp(argv[i], "--version") == 0) {
+        else if(strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             version(argv[0]);
             return 0;
         }
@@ -84,7 +85,7 @@ int main(int argc, char **argv)
             c_args.output_file = A_O;
             c_args.do_linking = false;
         }
-        else if(strcmp(argv[i], "-save-temps") == 0)
+        else if(strcmp(argv[i], "--save-temps") == 0)
             c_args.save_temps = true;
         else if(argv[i][0] == '-') {
             eprintf(argv[0], "unrecognized command-line option " QUOTE_FMT("%s") "\n", argv[i]);

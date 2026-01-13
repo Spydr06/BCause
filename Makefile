@@ -1,4 +1,4 @@
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -g -O
+CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -g -O
 
 CFLAGS_LIBB = -nostdlib -c 					\
 	-Wno-incompatible-library-redeclaration \

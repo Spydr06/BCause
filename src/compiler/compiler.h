@@ -2,6 +2,9 @@
 #define BCAUSE_COMPILER_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include "list.h"
 
 #define A_OUT "a.out"
@@ -16,6 +19,13 @@
 
 #define X86_64_WORD_SIZE sizeof(intptr_t)
 
+struct compiler_pos {
+    // TODO: 'whitespace' skips line before checking for semicolon,
+    // so displaying errors expecting semicolons may show wrong line.
+    const char *file_name;
+    size_t line;
+};
+
 struct compiler_args {
     const char *arg0; /* name of the executable */
     char *lib_dir; /* location of B library */
@@ -29,8 +39,10 @@ struct compiler_args {
     bool do_assembling; /* should the compiler assemble? */
     bool save_temps;    /* should temporary files get deleted? */
 
+    struct compiler_pos pos; /* current position in the source code */
+
     struct list locals; /* local variables */
-    unsigned long stack_offset; /* local variable offset */
+    uintmax_t stack_offset; /* local variable offset */
     struct list extrns; /* extrn variables */
 
     struct list strings; /* string table */
