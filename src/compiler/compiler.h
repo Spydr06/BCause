@@ -2,6 +2,9 @@
 #define BCAUSE_COMPILER_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include "list.h"
 
 #define A_OUT "a.out"
@@ -39,7 +42,7 @@ struct compiler_args {
     struct compiler_pos pos; /* current position in the source code */
 
     struct list locals; /* local variables */
-    unsigned long stack_offset; /* local variable offset */
+    uintmax_t stack_offset; /* local variable offset */
     struct list extrns; /* extrn variables */
 
     struct list strings; /* string table */
